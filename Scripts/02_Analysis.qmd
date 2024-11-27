@@ -1,0 +1,184 @@
+---
+Title: Data analysis
+Format: html
+Authors: M.R.Verschoor
+Date: 2024-11-27
+editor_options: 
+  chunk_output_type: console
+---
+
+## Set-up
+
+Notes: ALWAYS TRY TO RUN BEFORE CODING SO THAT PACKAGES ARE THE RIGHT VERSION AND SYNCHED WITH THE RENV ENVIRONMENT
+
+```{r renv environment}
+
+# clear everything in the R environment
+rm(list = ls())
+
+# restore the library
+renv::restore()
+
+# Load configuration settings for collaborative data loading
+source("config.R")  
+
+```
+
+
+## Loading and installing packages
+
+```{r packages}
+
+# Loading and installing the required Packages
+
+#General
+library(tidyverse)
+library(data.table)
+library(MetBrewer)
+library(ggh4x)
+library(ggsignif)
+library(patchwork)
+library(lme4)
+
+```
+
+## Loading in the Data 
+
+```{r Loading in the data}
+
+#GENERAL NOTE# 
+# ----- Load in the data --------# 
+microclimate_shield_day = load_data("microclimate_shield_day.csv")
+microclimate_shield_total= load_data("microclimate_shield_total.csv")
+
+# Ensure that Date is in Date format
+microclimate_shield_day$Date <- as.Date(microclimate_shield_day$Date)
+
+```
+
+## Setting up the color palette
+
+```{r Setting up the color palette}
+
+# Load the color palette and ensure it has enough colors for the unique levels in `treatment`
+# Define the specific colors for each treatment
+palette <- met.brewer("Lakota", n = 6, type = "discrete")
+# Create the expanded palette for the gradient (12 colors for 12 species)
+
+shield_colors <- c(
+  "present" = palette[5],
+  "absent" = palette[3])
+
+```
+
+## Analysis
+
+```{r Analysis}
+
+#For the total
+m_max_T_shield = lm(max_T2 ~ midshield, data = microclimate_shield_total)
+
+plot(m_max_T_shield)
+summary(m_max_T_shield)
+anova(m_max_T_shield)
+
+#Per day
+m_max_T_shield_day = lmer(max_T2 ~ midshield + (1 | Date), data = microclimate_shield_day)
+
+plot(m_max_T_shield_day)
+summary(m_max_T_shield_day)
+anova(m_max_T_shield_day)
+
+```
+
+## Plots
+
+```{r Plots}
+
+Plot_ST_shield = ggplot(microclimate_shield_total, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2, color = midshield, fill = midshield)) +
+  geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
+ geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) + # Adjusted dot size and position
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
+               width = 0.3, position = position_dodge(width = 0.7)) +
+  labs(x = "midshield", y = "Maximum temperature at 1cm (°C)") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "calibri", size = 20),
+    axis.text.y = element_text(family = "calibri", size = 24),
+    axis.title.x = element_text(family = "calibri", size = 24, face = "bold"),
+    axis.title.y = element_text(family = "calibri", size = 24, face = "bold"),
+    legend.title = element_text(family = "calibri", size = 24, face = "bold"),
+    legend.text = element_text(family = "calibri", size = 20),
+    legend.position = "none",
+    legend.key = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    panel.grid.minor = element_line(color = "gray", linetype = "dashed", size = 0.5) # Add minor gridlines
+  ) +
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) 
+
+Plot_ST_shield
+
+Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
+  # Plot summary statistics (mean) with stat_summary
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) + 
+  
+  # Add error bars (mean ± CI or SE) using stat_summary
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
+               width = 0.3) + 
+  
+  # Add a line connecting the mean points using stat_summary
+  stat_summary(fun = mean, geom = "line", size = 1, alpha = 0.7, aes(group = midshield)) + 
+  
+  # Customize labels and theme
+  labs(x = "Date", y = "Maximum daily temperature at 1cm (°C)") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "calibri", size = 20),
+    axis.text.y = element_text(family = "calibri", size = 24),
+    axis.title.x = element_text(family = "calibri", size = 24, face = "bold"),
+    axis.title.y = element_text(family = "calibri", size = 24, face = "bold"),
+    legend.title = element_text(family = "calibri", size = 24, face = "bold"),
+    legend.text = element_text(family = "calibri", size = 20),
+    legend.key = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    panel.grid.minor = element_line(color = "gray", linetype = "dashed", size = 0.5) # Add minor gridlines
+  ) +
+  
+  # Customize the x-axis to handle Date as continuous and display all dates
+  scale_x_date(
+    breaks = scales::date_breaks("2 days"),  # Display every day on the x-axis
+    labels = scales::date_format("%b %d"),  # Format the date labels as "Month Day"
+    expand = expansion(mult = c(0.05, 0.05))  # Add some space at both ends of the plot
+  ) +
+  
+  # Set color scale for midshield
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors)
+
+# Print the plot
+Plot_ST_day_shield
+
+ggplot(microclimate_shield, aes(x = midshield, y = mean_T2, fill = midshield)) +
+  geom_boxplot() +
+  labs(title = "Effect of Shield on Mean Temperature",
+       x = "Shield Presence",
+       y = "Mean Daily Temperature (°C)") +
+  theme_classic()
+
+ggplot(microclimate_shield, aes(x = midshield, y = max_T2, fill = midshield)) +
+  geom_boxplot() +
+  labs(title = "Effect of Shield on Mean Temperature",
+       x = "Shield Presence",
+       y = "Max Daily Temperature (°C)") +
+  theme_classic()
+
+```
+
+

@@ -1,0 +1,251 @@
+---
+Title: Cleaning Raw Microclimate Data
+Format: html
+Authors: M.R.Verschoor
+Date: 2024-03-14
+editor_options: 
+  chunk_output_type: console
+---
+
+## Set-up
+
+Notes: ALWAYS TRY TO RUN BEFORE CODING SO THAT PACKAGES ARE THE RIGHT VERSION AND SYNCHED WITH THE RENV ENVIRONMENT
+
+```{r renv environment}
+
+# clear everything in the R environment
+rm(list = ls())
+
+# restore the library
+renv::restore()
+
+# Load configuration settings for collaborative data loading
+source("config.R")  
+
+```
+
+
+## Loading and installing packages
+
+```{r packages}
+
+# Loading and installing the required Packages
+
+#General
+library(tidyverse)
+
+library(data.table)
+
+library(fasttime)
+
+library(lubridate)
+
+```
+
+## Loading in Microclimate data
+
+Purpose of chunk: Import and clean the microclimate data 
+
+Notes: Here, all data .csv files are imported and stored in a single data frame. To allow identification of the individual loggers as the logger data is stored in folders corresponding to the name of the containers. The functions below will name the folder according to the file location. 
+
+NOT NEEDED IF ALREADY MADE, CONINUE TO CHUNK BELOW (SAVES LOT OF TIME)
+
+```{r Loading in Microclimate data}
+
+# Reading in the microclimate data
+
+# Tomst Probe data cleaning for analysis
+# reading in the data and binding the different files
+
+# Use the data_path root and specify the sub directories dynamically
+# Define the directory for Probes2023-2024 within data_path
+probe_data_dir <- file.path(data_path, "Data/Raw/Probes/")
+
+# List all .csv files in the specified directory and its sub directories
+tms.sm.files <- list.files(probe_data_dir, pattern = "\\.csv$", recursive = TRUE, full.names = TRUE)
+
+# Initialize an empty list to store data frames, setting length based on the number of files
+tms.sm.list <- vector(mode = "list", length = length(tms.sm.files))
+
+# Function to read and name combo using fread for faster reading
+read_and_name_combo <- function(TMSpath){
+  data <- data.table::fread(TMSpath, sep = ";", header = FALSE)
+  data[, probe := basename(TMSpath)]
+  data[, subplot := basename(dirname(TMSpath))]
+  return(data)
+}
+
+# Loop over all files and read each one, storing it in tms.sm.list
+for (i in seq_along(tms.sm.files)) {
+  TMSpath <- tms.sm.files[[i]]
+  tms.sm.list[[i]] <- read_and_name_combo(TMSpath)
+}
+
+# Bind all rows together into a single data.table
+microclimate_shield <- data.table::rbindlist(tms.sm.list)
+
+```
+
+```{r Cleaning up the probe data}
+
+# Cleaning up the probe data
+# Lowercase plots and format the probe code
+microclimate_shield[, subplot := tolower(subplot)]
+microclimate_shield[, probe := substr(probe, 6, 13)]
+
+# Rename columns using data.table's `setnames` for efficiency
+data.table::setnames(microclimate_shield, old = names(microclimate_shield)[1:9],
+         new = c("index", "DateTime", "Timezone", "T1", "T2", "T3", "Moisture", "Shake", "ErrFlag"))
+
+microclimate_shield[, V10 := NULL]  # Remove the unnecessary column
+
+# Convert columns T1, T2, and T3 to numeric in one go
+microclimate_shield[, c("T1", "T2", "T3") := lapply(.SD, as.numeric), .SDcols = c("T1", "T2", "T3")]
+
+# Convert DateTime to POSIXct with timezone "UTC" (adjust if different format)
+microclimate_shield[, DateTime := fastPOSIXct(DateTime, tz = "UTC")]
+
+# Add a 2-hour timezone difference
+microclimate_shield[, DateTime := DateTime + hours(2)]
+
+# Extract Date and Time from the adjusted DateTime
+microclimate_shield[, Date := as.Date(DateTime)]
+microclimate_shield[, Time := format(DateTime, "%H:%M:%S")]
+
+# Extract Month and year from the adjusted DateTime and add it as a new column
+microclimate_shield[, Month := format(DateTime, "%B %Y")]
+
+# Remove the Timezone column and any extra columns
+microclimate_shield[, Timezone := NULL] 
+
+# getting the correct dates
+microclimate_shield = microclimate_shield[microclimate_shield$DateTime >= "2024-08-05 00:00:00",]
+
+# Rearrange columns
+data.table::setcolorder(microclimate_shield, c("index", "DateTime", "Date", "Time", "Month", "probe", "subplot", "T1", "T2", "T3", "Moisture", "Shake", "ErrFlag"))
+
+# Add shield presence/absence column based on `subplot`
+microclimate_shield[, midshield := ifelse(
+    substr(subplot, nchar(subplot), nchar(subplot)) %in% c("a", "c") | subplot == "65d", "present",
+    ifelse(substr(subplot, nchar(subplot), nchar(subplot)) %in% c("b", "d") | subplot == "65c", "absent", NA_character_)
+)]
+
+```
+
+## Processing Microclimate data and calculating the SWC
+
+Purpose of chunk: Format Logger data and calibrate TMS raw moisture signal to volumetric Soil Water content (SWC, %).
+
+Notes: Resulting SWC is expressed as a fraction between 0 and 1.
+
+```{r Calculating SWC microclimate data}
+
+# Universal TOMST calibration 
+microclimate_shield <- microclimate_shield  |> 
+  dplyr::mutate(SWC = round((Moisture^2 * -1.34e-08
+ + Moisture * 0.0002496218 + -0.1578888
+), 4))
+
+
+# Removing the night hours (21:00 - 06:00) from the data & removing decrepit measurements 
+microclimate_shield <- microclimate_shield[
+  Time >= "06:00" & Time <= "21:00" & 
+  !(subplot %in% c("63B", "58A")) &
+  (SWC >= 0.01 | is.na(SWC)) &
+  (T1 <= 45 | is.na(T1)) &
+  (T2 <= 45 | is.na(T2)) &
+  (T3 <= 45 | is.na(T3)) &
+  (T1 >= -20 | is.na(T1)) &
+  (T2 >= -20 | is.na(T2)) &
+  (T3 >= -20 | is.na(T3))
+]
+
+
+```
+
+
+```{r Creating the mean and max dataframe}
+
+# Calculate the max per probe, the mean per probe for the total period
+
+# Calculate the max per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
+microclimate_shield_total <- microclimate_shield %>%
+  group_by(subplot) %>%  # Group by subplot and Date only
+  dplyr::summarise(
+    min_SWC = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3 = quantile(T3, 0.95, na.rm = TRUE),
+    mean_SWC = mean(SWC, na.rm = TRUE),
+    mean_T1 = mean(T1, na.rm = TRUE),
+    mean_T2 = mean(T2, na.rm = TRUE),
+    mean_T3 = mean(T3, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Ungroup after summarisation
+
+# Now join the original data back to keep 'probe' and 'midshield' columns
+microclimate_shield_total <- microclimate_shield_total %>%
+  left_join(
+    microclimate_shield %>%
+      select(subplot, probe, midshield) %>%
+      distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
+    by = c("subplot")
+  )
+
+
+```
+
+```{r Creating the mean and max dataframe}
+
+# Calculate the max per probe, the mean per probe per day
+
+# Calculate the max per probe, the mean per probe per day, but group only by 'subplot' and 'Date'
+microclimate_shield_day <- microclimate_shield %>%
+  group_by(subplot, Date) %>%  # Group by subplot and Date only
+  dplyr::summarise(
+    min_SWC = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3 = quantile(T3, 0.95, na.rm = TRUE),
+    mean_SWC = mean(SWC, na.rm = TRUE),
+    mean_T1 = mean(T1, na.rm = TRUE),
+    mean_T2 = mean(T2, na.rm = TRUE),
+    mean_T3 = mean(T3, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Ungroup after summarisation
+
+# Now join the original data back to keep 'probe' and 'midshield' columns
+microclimate_shield_day <- microclimate_shield_day %>%
+  left_join(
+    microclimate_shield %>%
+      select(subplot, Date, probe, midshield) %>%
+      distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
+    by = c("subplot", "Date")
+  )
+
+
+```
+
+```{r Saving the data}
+
+#Saving the cleaned data
+
+# Define the output directory
+output_dir <- file.path(data_path, "Data/Cleaned")
+
+# Define the full file path for the CSV
+output_file_1 <- file.path(output_dir, "microclimate_shield_day.csv")
+output_file_2 <- file.path(output_dir, "microclimate_shield.csv")
+output_file_3 <- file.path(output_dir, "microclimate_shield_total.csv")
+
+# Save the filtered data to a CSV file using fwrite
+data.table::fwrite(microclimate_shield_day, file = output_file_1)
+data.table::fwrite(microclimate_shield, file = output_file_2)
+data.table::fwrite(microclimate_shield_total, file = output_file_3)
+
+# Confirmation message
+cat("Data saved to:", output_file_1, "\n")
+cat("Data saved to:", output_file_2, "\n")
+cat("Data saved to:", output_file_3, "\n")
+```
+
