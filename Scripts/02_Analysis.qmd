@@ -39,6 +39,7 @@ library(ggh4x)
 library(ggsignif)
 library(patchwork)
 library(lme4)
+library(brms)
 
 ```
 
@@ -77,18 +78,19 @@ shield_colors <- c(
 
 #For the total
 m_max_T_shield = lm(max_T2 ~ midshield, data = microclimate_shield_total)
+m_max_T_shield = lm(max_T2 ~ midshield*Date, data = microclimate_shield_day)
 
 plot(m_max_T_shield)
 summary(m_max_T_shield)
 anova(m_max_T_shield)
 
 #Per day
-m_max_T_shield_day = lmer(max_T2 ~ midshield + (1 | Date), data = microclimate_shield_day)
+m_max_T_shield_day = brm(max_T2 ~ midshield + (1 | Date), data = microclimate_shield_day)
 
 plot(m_max_T_shield_day)
 summary(m_max_T_shield_day)
 anova(m_max_T_shield_day)
-
+pp_check(m_max_T_shield_day)
 ```
 
 ## Plots
