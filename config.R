@@ -4,9 +4,9 @@
 find_onedrive_path <- function() {
   # Define potential OneDrive paths for both Windows and macOS
   potential_paths <- c(
-    "C:/Users/minkv/OneDrive - Universiteit Utrecht/Projects/2024_BioCliVETomstShielding"
+    "C:/Users/minkv/OneDrive - Universiteit Utrecht/Projects/2025_BioCliVETomstShielding"
     # Add macOS paths here if necessary, e.g.
-    # "/Users/yourusername/OneDrive - Universiteit Utrecht/Projects/2024_Verschoor_FacilitationTraits"
+    # "/Users/yourusername/OneDrive - Universiteit Utrecht/Projects/2025_BioCliVETomstShielding"
   )
   
   # Check which path exists and return it
