@@ -89,13 +89,12 @@ anova(m_max_T_shield)
 
 m_max_T_shield_day_new <- brm(
   max_T2 ~ midshield + (1 | Date),
-  data = microclimate_shield_day,
-  iter = 4000, warmup = 2000
+  data = microclimate_shield_day
 )
 
-plot(m_max_T_shield_day)
-summary(m_max_T_shield_day)
-pp_check(m_max_T_shield_day)
+plot(m_max_T_shield_day_new)
+summary(m_max_T_shield_day_new)
+pp_check(m_max_T_shield_day_new)
 anova(m_max_T_shield_day)
 
 plot(residuals(m_max_T_shield_day) ~ fitted(m_max_T_shield_day))

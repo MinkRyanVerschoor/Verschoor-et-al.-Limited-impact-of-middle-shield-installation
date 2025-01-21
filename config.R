@@ -4,9 +4,9 @@
 find_onedrive_path <- function() {
   # Define potential OneDrive paths for both Windows and macOS
   potential_paths <- c(
-    "C:/Users/minkv/OneDrive - Universiteit Utrecht/Projects/2025_BioCliVETomstShielding"
+    "C:/Users/minkv/OneDrive - Universiteit Utrecht/Projects/2025_Verschoor_Limited impact of lower shield installation"
     # Add macOS paths here if necessary, e.g.
-    # "/Users/yourusername/OneDrive - Universiteit Utrecht/Projects/2025_BioCliVETomstShielding"
+    # "/Users/yourusername/OneDrive - Universiteit Utrecht/Projects/2025_Verschoor_Limited impact of lower shield installation"
   )
   
   # Check which path exists and return it
@@ -35,3 +35,4 @@ load_data <- function(file_name) {
   # Load the CSV file using fread from data.table
   return(data.table::fread(file_path[1], header = TRUE))  # Return the first match
 }
+
