@@ -40,6 +40,9 @@ library(ggsignif)
 library(patchwork)
 library(lme4)
 library(brms)
+library(extrafont)
+
+
 
 ```
 
@@ -59,7 +62,7 @@ microclimate_shield_day$Date <- as.Date(microclimate_shield_day$Date)
 
 ## Setting up the color palette
 
-```{r Setting up the color palette}
+```{r Setting up the color palette and fonts}
 
 # Load the color palette and ensure it has enough colors for the unique levels in `treatment`
 # Define the specific colors for each treatment
@@ -70,6 +73,18 @@ shield_colors <- c(
   "present" = palette[5],
   "absent" = palette[3])
 
+
+# if the font is not in default search path e.g. `C:/Windows/Fonts/`
+myfontPath <- "C:/Users/xxx/Downloads/Fonts/"
+font_import(pattern = "DejaVu",
+            paths = myfontPath,
+            recursive = TRUE,
+            prompt = FALSE)
+
+font_import()  # This imports fonts if not already done
+loadfonts(device = "all")    # Loads the fonts
+myFont <- "Garamond"
+fonts()
 ```
 
 ## Analysis
@@ -91,17 +106,8 @@ m_max_T_shield_day<- brm(
 )
 
 plot(m_max_T_shield_day)
-summary(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
-
-m_max_T_shield_day_new <- brm(
-  max_T2 ~ midshield + (midshield | Date),
-  data = microclimate_shield_day
-)
-
-plot(m_max_T_shield_day_new)
-summary(m_max_T_shield_day_new)
-pp_check(m_max_T_shield_day_new)
+summary(m_max_T_shield_day)
 
 ```
 
@@ -115,15 +121,15 @@ Plot_ST_shield = ggplot(microclimate_shield_total, aes(x = factor(midshield, lev
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
                width = 0.3, position = position_dodge(width = 0.7)) +
-  labs(x = "midshield", y = "Maximum temperature at 1cm (°C)") +
+  labs(x = "Shield configuration", y = "Maximum temperature at 1cm (°C)") +
   theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, family = "calibri", size = 20),
-    axis.text.y = element_text(family = "calibri", size = 24),
-    axis.title.x = element_text(family = "calibri", size = 24, face = "bold"),
-    axis.title.y = element_text(family = "calibri", size = 24, face = "bold"),
-    legend.title = element_text(family = "calibri", size = 24, face = "bold"),
-    legend.text = element_text(family = "calibri", size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "myFont", size = 20),
+    axis.text.y = element_text(family = "myFont", size = 24),
+    axis.title.x = element_text(family = "myFont", size = 24, face = "bold"),
+    axis.title.y = element_text(family = "myFont", size = 24, face = "bold"),
+    legend.title = element_text(family = "myFont", size = 24, face = "bold"),
+    legend.text = element_text(family = "myFont", size = 20),
     legend.position = "none",
     legend.key = element_blank(),
     panel.grid = element_blank(),
@@ -136,6 +142,25 @@ Plot_ST_shield = ggplot(microclimate_shield_total, aes(x = factor(midshield, lev
   scale_fill_manual(values = shield_colors) 
 
 Plot_ST_shield
+
+# Define the output directory
+output_dir <- file.path(data_path, "Figures/")
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot_1 <- file.path(output_dir, "Figure_1_overall_effect.jpg")
+
+# Save the plot using ggsave
+ggsave(
+  filename = output_file_plot,
+  plot = Plot_ST_shield,
+  width = 7.48,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+
+
 
 Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
   # Plot summary statistics (mean) with stat_summary
@@ -152,12 +177,12 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
   labs(x = "Date", y = "Maximum daily temperature at 1cm (°C)") +
   theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, family = "calibri", size = 20),
-    axis.text.y = element_text(family = "calibri", size = 24),
-    axis.title.x = element_text(family = "calibri", size = 24, face = "bold"),
-    axis.title.y = element_text(family = "calibri", size = 24, face = "bold"),
-    legend.title = element_text(family = "calibri", size = 24, face = "bold"),
-    legend.text = element_text(family = "calibri", size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "helvetica", size = 20),
+    axis.text.y = element_text(family = "helvetica", size = 24),
+    axis.title.x = element_text(family = "helvetica", size = 24, face = "bold"),
+    axis.title.y = element_text(family = "helvetica", size = 24, face = "bold"),
+    legend.title = element_text(family = "helvetica", size = 24, face = "bold"),
+    legend.text = element_text(family = "helvetica", size = 20),
     legend.key = element_blank(),
     panel.grid = element_blank(),
     panel.border = element_blank(),
@@ -179,6 +204,23 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
 # Print the plot
 Plot_ST_day_shield
 
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot_2 <- file.path(output_dir, "Figure_2_day.jpg")
+
+# Save the plot using ggsave
+ggsave(
+  filename = output_file_plot,
+  plot = Plot_ST_day_shield,
+  width = 7.48,
+  height = 5,
+  units = "in",
+  dpi = 300
+)
+
+
+
+
 ggplot(microclimate_shield, aes(x = midshield, y = mean_T2, fill = midshield)) +
   geom_boxplot() +
   labs(title = "Effect of Shield on Mean Temperature",
@@ -194,5 +236,3 @@ ggplot(microclimate_shield, aes(x = midshield, y = max_T2, fill = midshield)) +
   theme_classic()
 
 ```
-
-
