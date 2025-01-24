@@ -74,16 +74,8 @@ shield_colors <- c(
   "absent" = palette[3])
 
 
-# if the font is not in default search path e.g. `C:/Windows/Fonts/`
-myfontPath <- "C:/Users/xxx/Downloads/Fonts/"
-font_import(pattern = "DejaVu",
-            paths = myfontPath,
-            recursive = TRUE,
-            prompt = FALSE)
-
 font_import()  # This imports fonts if not already done
 loadfonts(device = "all")    # Loads the fonts
-myFont <- "Garamond"
 fonts()
 ```
 
@@ -109,6 +101,20 @@ plot(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
 summary(m_max_T_shield_day)
 
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "Figure_pp_check.jpg")
+
+# Generate the pp_check plot and assign it to an object
+pp_plot <- pp_check(m_max_T_shield_day)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
 ```
 
 ## Plots
@@ -117,19 +123,21 @@ summary(m_max_T_shield_day)
 
 Plot_ST_shield = ggplot(microclimate_shield_total, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2, color = midshield, fill = midshield)) +
   geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
- geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) + # Adjusted dot size and position
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) + # Adjusted dot size and position
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
                width = 0.3, position = position_dodge(width = 0.7)) +
   labs(x = "Shield configuration", y = "Maximum temperature at 1cm (°C)") +
   theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, family = "myFont", size = 20),
-    axis.text.y = element_text(family = "myFont", size = 24),
-    axis.title.x = element_text(family = "myFont", size = 24, face = "bold"),
-    axis.title.y = element_text(family = "myFont", size = 24, face = "bold"),
-    legend.title = element_text(family = "myFont", size = 24, face = "bold"),
-    legend.text = element_text(family = "myFont", size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.x = element_text(family = "Arial", size = 16,
+                                margin = margin(t = 10, r = 0, b = 0, l = 0)), # Adds 10 units of space to the bottom,
+    axis.title.y = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 0, r = 10, b = 0, l = 0)), # Adds 10 units of space to the right
+    legend.title = element_text(family = "Arial", size = 16),
+    legend.text = element_text(family = "Arial", size = 16),
     legend.position = "none",
     legend.key = element_blank(),
     panel.grid = element_blank(),
@@ -142,24 +150,6 @@ Plot_ST_shield = ggplot(microclimate_shield_total, aes(x = factor(midshield, lev
   scale_fill_manual(values = shield_colors) 
 
 Plot_ST_shield
-
-# Define the output directory
-output_dir <- file.path(data_path, "Figures/")
-
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot_1 <- file.path(output_dir, "Figure_1_overall_effect.jpg")
-
-# Save the plot using ggsave
-ggsave(
-  filename = output_file_plot,
-  plot = Plot_ST_shield,
-  width = 7.48,
-  height = 5,
-  units = "in",
-  dpi = 300
-)
-
 
 
 Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
@@ -177,12 +167,15 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
   labs(x = "Date", y = "Maximum daily temperature at 1cm (°C)") +
   theme_classic() +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1, family = "helvetica", size = 20),
-    axis.text.y = element_text(family = "helvetica", size = 24),
-    axis.title.x = element_text(family = "helvetica", size = 24, face = "bold"),
-    axis.title.y = element_text(family = "helvetica", size = 24, face = "bold"),
-    legend.title = element_text(family = "helvetica", size = 24, face = "bold"),
-    legend.text = element_text(family = "helvetica", size = 20),
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.x = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 10, r = 0, b = 0, l = 0)),
+    axis.title.y = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 0, r = 10, b = 0, l = 0)), # Adds space between the label and axis
+    legend.title = element_text(family = "Arial", size = 16),
+    legend.text = element_text(family = "Arial", size = 16),
+    legend.position = "none",
     legend.key = element_blank(),
     panel.grid = element_blank(),
     panel.border = element_blank(),
@@ -192,7 +185,7 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
   
   # Customize the x-axis to handle Date as continuous and display all dates
   scale_x_date(
-    breaks = scales::date_breaks("2 days"),  # Display every day on the x-axis
+    breaks = scales::date_breaks("3 days"),  # Display every 2 days on the x-axis
     labels = scales::date_format("%b %d"),  # Format the date labels as "Month Day"
     expand = expansion(mult = c(0.05, 0.05))  # Add some space at both ends of the plot
   ) +
@@ -204,35 +197,26 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
 # Print the plot
 Plot_ST_day_shield
 
+combined_plot <- Plot_ST_shield + Plot_ST_day_shield +
+  plot_layout(ncol = 2, widths = c(1, 1)) + 
+  plot_annotation(tag_levels = "A")
+
+# Display the combined plot
+combined_plot
+
 # Save as JPG
 # Define the full file path for the plot
-output_file_plot_2 <- file.path(output_dir, "Figure_2_day.jpg")
+output_file_plot2 <- file.path(output_dir, "Figure_2.jpg")
 
 # Save the plot using ggsave
 ggsave(
   filename = output_file_plot,
-  plot = Plot_ST_day_shield,
-  width = 7.48,
-  height = 5,
-  units = "in",
-  dpi = 300
+  plot = combined_plot,
+  width = 7480,
+  height = 4000,
+  units = "px",
+  dpi = 500
 )
 
-
-
-
-ggplot(microclimate_shield, aes(x = midshield, y = mean_T2, fill = midshield)) +
-  geom_boxplot() +
-  labs(title = "Effect of Shield on Mean Temperature",
-       x = "Shield Presence",
-       y = "Mean Daily Temperature (°C)") +
-  theme_classic()
-
-ggplot(microclimate_shield, aes(x = midshield, y = max_T2, fill = midshield)) +
-  geom_boxplot() +
-  labs(title = "Effect of Shield on Mean Temperature",
-       x = "Shield Presence",
-       y = "Max Daily Temperature (°C)") +
-  theme_classic()
 
 ```
