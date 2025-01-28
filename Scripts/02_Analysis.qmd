@@ -74,7 +74,6 @@ shield_colors <- c(
   "absent" = palette[3])
 
 
-font_import()  # This imports fonts if not already done
 loadfonts(device = "all")    # Loads the fonts
 fonts()
 ```
@@ -204,19 +203,6 @@ combined_plot <- Plot_ST_shield + Plot_ST_day_shield +
 # Display the combined plot
 combined_plot
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot2 <- file.path(output_dir, "Figure_2.jpg")
-
-# Save the plot using ggsave
-ggsave(
-  filename = output_file_plot,
-  plot = combined_plot,
-  width = 7480,
-  height = 4000,
-  units = "px",
-  dpi = 500
-)
 
 
 ```
