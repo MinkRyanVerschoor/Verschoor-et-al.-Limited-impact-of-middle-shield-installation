@@ -52,6 +52,9 @@ NOT NEEDED IF ALREADY MADE, CONINUE TO CHUNK BELOW (SAVES LOT OF TIME)
 
 ```{r Loading in Microclimate data}
 
+# Loading Bioclive design
+bioclive_design = load_data("bioclive_design.csv")
+
 # Reading in the microclimate data
 
 # Tomst Probe data cleaning for analysis
@@ -146,9 +149,20 @@ microclimate_shield <- microclimate_shield  |>
  + Moisture * 0.0002496218 + -0.1578888
 ), 4))
 
+# Checking weather max to determine the cut-off point for outliers 
+
+# Read the CSV file
+knmi_data <- read_csv("C:/Users/minkv/OneDrive - Universiteit Utrecht/Projects/2025_Verschoor_Limited impact of lower shield installation/Data/Raw/Daggegevens weer.txt")  %>%
+  mutate(YYYYMMDD = as.Date(as.character(YYYYMMDD), format = "%Y%m%d")) |> # Convert YYYYMMDD to Date format
+  filter(YYYYMMDD >= as.Date("2024-08-05") & YYYYMMDD < as.Date("2024-09-04")) |> 
+  mutate(TX = TX / 10) |> 
+  mutate(TN = TN / 10)
+
+max(knmi_data$TX)
+min(knmi_data$TN)
 
 # Removing the night hours (21:00 - 06:00) from the data & removing decrepit measurements 
-microclimate_shield <- microclimate_shield[
+microclimate_shield_day <- microclimate_shield[
   Time >= "06:00" & Time <= "21:00" & 
   !(subplot %in% c("63B", "58A")) &
   (SWC >= 0.01 | is.na(SWC)) &
@@ -160,6 +174,21 @@ microclimate_shield <- microclimate_shield[
   (T3 >= -20 | is.na(T3))
 ]
 
+# Keeping the night hours (21:00 - 06:00) from the data & removing decrepit measurements 
+microclimate_shield_night <- microclimate_shield[
+  Time <= "06:00" & Time  >=  "21:00" & 
+  !(subplot %in% c("63B", "58A")) &
+  (SWC >= 0.01 | is.na(SWC)) &
+  (T1 <= 45 | is.na(T1)) &
+  (T2 <= 45 | is.na(T2)) &
+  (T3 <= 45 | is.na(T3)) &
+  (T1 >= -20 | is.na(T1)) &
+  (T2 >= -20 | is.na(T2)) &
+  (T3 >= -20 | is.na(T3))
+]
+
+
+
 
 ```
 
@@ -169,28 +198,71 @@ microclimate_shield <- microclimate_shield[
 # Calculate the max per probe, the mean per probe for the total period
 
 # Calculate the max per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
-microclimate_shield_total <- microclimate_shield %>%
+microclimate_shield_total_day <- microclimate_shield_day %>%
   group_by(subplot) %>%  # Group by subplot and Date only
   dplyr::summarise(
-    min_SWC = quantile(SWC, 0.05, na.rm = TRUE),
-    max_T1 = quantile(T1, 0.95, na.rm = TRUE),
-    max_T2 = quantile(T2, 0.95, na.rm = TRUE),
-    max_T3 = quantile(T3, 0.95, na.rm = TRUE),
-    mean_SWC = mean(SWC, na.rm = TRUE),
-    mean_T1 = mean(T1, na.rm = TRUE),
-    mean_T2 = mean(T2, na.rm = TRUE),
-    mean_T3 = mean(T3, na.rm = TRUE)
+    min_SWC = min(SWC, na.rm = TRUE),
+    max_T1 = max(T1, na.rm = TRUE),
+    max_T2 = max(T2, na.rm = TRUE),
+    max_T3 = max(T3, na.rm = TRUE),
+    min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
+    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
+    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
+    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
+    min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
+    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
+    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
+    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
   ) %>%
   ungroup()  # Ungroup after summarisation
 
 # Now join the original data back to keep 'probe' and 'midshield' columns
-microclimate_shield_total <- microclimate_shield_total %>%
+microclimate_shield_total_day <- microclimate_shield_total_day %>%
   left_join(
     microclimate_shield %>%
       select(subplot, probe, midshield) %>%
       distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
     by = c("subplot")
-  )
+  ) |> 
+  left_join(bioclive_design)
+
+# Calculate the max per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
+microclimate_shield_total_night <- microclimate_shield_night %>%
+  group_by(subplot) %>%  # Group by subplot and Date only
+  dplyr::summarise(
+    min_SWC = min(SWC, na.rm = TRUE),
+    max_T1 = max(T1, na.rm = TRUE),
+    max_T2 = max(T2, na.rm = TRUE),
+    max_T3 = max(T3, na.rm = TRUE),
+    min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
+    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
+    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
+    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
+    min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
+    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
+    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
+    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Ungroup after summarisation
+
+# Now join the original data back to keep 'probe' and 'midshield' columns
+microclimate_shield_total_night <- microclimate_shield_total_night %>%
+  left_join(
+    microclimate_shield %>%
+      select(subplot, probe, midshield) %>%
+      distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
+    by = c("subplot")
+  ) |> 
+  left_join(bioclive_design)
+
 
 
 ```
@@ -200,28 +272,70 @@ microclimate_shield_total <- microclimate_shield_total %>%
 # Calculate the max per probe, the mean per probe per day
 
 # Calculate the max per probe, the mean per probe per day, but group only by 'subplot' and 'Date'
-microclimate_shield_day <- microclimate_shield %>%
+microclimate_shield_date_day <- microclimate_shield_day %>%
   group_by(subplot, Date) %>%  # Group by subplot and Date only
-  dplyr::summarise(
-    min_SWC = quantile(SWC, 0.05, na.rm = TRUE),
-    max_T1 = quantile(T1, 0.95, na.rm = TRUE),
-    max_T2 = quantile(T2, 0.95, na.rm = TRUE),
-    max_T3 = quantile(T3, 0.95, na.rm = TRUE),
-    mean_SWC = mean(SWC, na.rm = TRUE),
-    mean_T1 = mean(T1, na.rm = TRUE),
-    mean_T2 = mean(T2, na.rm = TRUE),
-    mean_T3 = mean(T3, na.rm = TRUE)
+   dplyr::summarise(
+    min_SWC = min(SWC, na.rm = TRUE),
+    max_T1 = max(T1, na.rm = TRUE),
+    max_T2 = max(T2, na.rm = TRUE),
+    max_T3 = max(T3, na.rm = TRUE),
+    min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
+    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
+    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
+    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
+    min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
+    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
+    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
+    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
   ) %>%
   ungroup()  # Ungroup after summarisation
 
 # Now join the original data back to keep 'probe' and 'midshield' columns
-microclimate_shield_day <- microclimate_shield_day %>%
+microclimate_shield_date_day <- microclimate_shield_date_day %>%
   left_join(
     microclimate_shield %>%
       select(subplot, Date, probe, midshield) %>%
       distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
     by = c("subplot", "Date")
-  )
+  ) |> 
+  left_join(bioclive_design)
+
+# Calculate the max per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
+microclimate_shield_date_night <- microclimate_shield_night %>%
+  group_by(subplot, Date) %>%  # Group by subplot and Date only
+  dplyr::summarise(
+    min_SWC = min(SWC, na.rm = TRUE),
+    max_T1 = max(T1, na.rm = TRUE),
+    max_T2 = max(T2, na.rm = TRUE),
+    max_T3 = max(T3, na.rm = TRUE),
+    min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
+    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
+    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
+    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
+    min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
+    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
+    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
+    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
+    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
+    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
+    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
+  ) %>%
+  ungroup()  # Ungroup after summarisation
+
+# Now join the original data back to keep 'probe' and 'midshield' columns
+microclimate_shield_date_night <- microclimate_shield_date_night %>%
+  left_join(
+    microclimate_shield %>%
+      select(subplot, Date, probe, midshield) %>%
+      distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
+    by = c("subplot")
+  ) |> 
+  left_join(bioclive_design)
 
 
 ```
@@ -234,18 +348,21 @@ microclimate_shield_day <- microclimate_shield_day %>%
 output_dir <- file.path(data_path, "Data/Cleaned")
 
 # Define the full file path for the CSV
-output_file_1 <- file.path(output_dir, "microclimate_shield_day.csv")
-output_file_2 <- file.path(output_dir, "microclimate_shield.csv")
-output_file_3 <- file.path(output_dir, "microclimate_shield_total.csv")
+output_file_1 <- file.path(output_dir, "microclimate_shield_total_day.csv")
+output_file_2 <- file.path(output_dir, "microclimate_shield_total_night.csv")
+output_file_3 <- file.path(output_dir, "microclimate_shield_date_night.csv")
+output_file_4 <- file.path(output_dir, "microclimate_shield_date_day.csv")
 
 # Save the filtered data to a CSV file using fwrite
-data.table::fwrite(microclimate_shield_day, file = output_file_1)
-data.table::fwrite(microclimate_shield, file = output_file_2)
-data.table::fwrite(microclimate_shield_total, file = output_file_3)
+data.table::fwrite(microclimate_shield_total_day, file = output_file_1)
+data.table::fwrite(microclimate_shield_total_night, file = output_file_2)
+data.table::fwrite(microclimate_shield_date_night, file = output_file_4)
+data.table::fwrite(microclimate_shield_date_day, file = output_file_4)
 
 # Confirmation message
 cat("Data saved to:", output_file_1, "\n")
 cat("Data saved to:", output_file_2, "\n")
 cat("Data saved to:", output_file_3, "\n")
+cat("Data saved to:", output_file_4, "\n")
 ```
 

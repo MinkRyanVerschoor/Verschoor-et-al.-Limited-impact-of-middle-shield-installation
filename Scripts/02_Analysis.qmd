@@ -52,11 +52,14 @@ library(extrafont)
 
 #GENERAL NOTE# 
 # ----- Load in the data --------# 
-microclimate_shield_day = load_data("microclimate_shield_day.csv")
-microclimate_shield_total= load_data("microclimate_shield_total.csv")
+microclimate_shield_day = load_data("microclimate_shield_total_day.csv")
+microclimate_shield_night = load_data("microclimate_shield_total_night.csv")
+microclimate_shield_date_day = load_data("microclimate_shield_date_day.csv")
+microclimate_shield_date_night = load_data("microclimate_shield_date_night.csv")
 
 # Ensure that Date is in Date format
-microclimate_shield_day$Date <- as.Date(microclimate_shield_day$Date)
+microclimate_shield_date_day$Date <- as.Date(microclimate_shield_date_day$Date)
+microclimate_shield_date_night$Date <- as.Date(microclimate_shield_date_night$Date)
 
 ```
 
@@ -83,7 +86,7 @@ fonts()
 ```{r Analysis}
 
 #For the total
-m_max_T_shield = brm(max_T2 ~ midshield, data = microclimate_shield_total)
+m_max_T_shield = brm(max_T2 ~ midshield + (1|div), data = microclimate_shield_total)
 
 plot(m_max_T_shield)
 summary(m_max_T_shield)
