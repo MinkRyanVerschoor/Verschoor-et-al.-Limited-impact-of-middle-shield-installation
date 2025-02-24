@@ -53,7 +53,18 @@ NOT NEEDED IF ALREADY MADE, CONINUE TO CHUNK BELOW (SAVES LOT OF TIME)
 ```{r Loading in Microclimate data}
 
 # Loading Bioclive design
-bioclive_design = load_data("bioclive_design.csv")
+bioclive_design <- load_data("bioclive_design.csv") |>
+  select(-V1) |>
+  mutate(subplot = paste0(plot, subplot)) |>
+  mutate(
+    dist_wall = case_when(
+      plot %in% 1:11 | plot %in% c(12, 22, 23, 33, 34, 44, 55, 66, 77, 45, 56, 67, 78:88) ~ 1,
+      plot %in% 13:21 | plot %in% 68:76 | plot %in% c(24, 35, 46, 57, 32, 43, 54, 65) ~ 2,
+      plot %in% 25:31 | plot %in% 58:64 | plot %in% c(36, 47, 53, 42) ~ 3,
+      plot %in% 37:41 | plot %in% 48:52 ~ 4,
+      TRUE ~ NA_real_ # If no condition matches, return NA
+    )
+  )
 
 # Reading in the microclimate data
 
@@ -174,9 +185,11 @@ microclimate_shield_day <- microclimate_shield[
   (T3 >= -20 | is.na(T3))
 ]
 
-# Keeping the night hours (21:00 - 06:00) from the data & removing decrepit measurements 
+microclimate_shield$Time <- as.POSIXct(microclimate_shield$Time, format="%H:%M:%S")
+
+# Assuming `Time` is a POSIXct or POSIXlt object, or it's in an easy-to-parse format
 microclimate_shield_night <- microclimate_shield[
-  Time <= "06:00" & Time  >=  "21:00" & 
+  (format(Time, "%H:%M:%S") >= "21:00:00" | format(Time, "%H:%M:%S") <= "06:00:00") & 
   !(subplot %in% c("63B", "58A")) &
   (SWC >= 0.01 | is.na(SWC)) &
   (T1 <= 45 | is.na(T1)) &
@@ -186,7 +199,6 @@ microclimate_shield_night <- microclimate_shield[
   (T2 >= -20 | is.na(T2)) &
   (T3 >= -20 | is.na(T3))
 ]
-
 
 
 
@@ -331,7 +343,7 @@ microclimate_shield_date_night <- microclimate_shield_night %>%
 microclimate_shield_date_night <- microclimate_shield_date_night %>%
   left_join(
     microclimate_shield %>%
-      select(subplot, Date, probe, midshield) %>%
+      select(subplot, probe, midshield) %>%
       distinct(),  # Keep distinct rows of 'probe' and 'midshield' for each subplot & Date
     by = c("subplot")
   ) |> 
@@ -356,7 +368,7 @@ output_file_4 <- file.path(output_dir, "microclimate_shield_date_day.csv")
 # Save the filtered data to a CSV file using fwrite
 data.table::fwrite(microclimate_shield_total_day, file = output_file_1)
 data.table::fwrite(microclimate_shield_total_night, file = output_file_2)
-data.table::fwrite(microclimate_shield_date_night, file = output_file_4)
+data.table::fwrite(microclimate_shield_date_night, file = output_file_3)
 data.table::fwrite(microclimate_shield_date_day, file = output_file_4)
 
 # Confirmation message
