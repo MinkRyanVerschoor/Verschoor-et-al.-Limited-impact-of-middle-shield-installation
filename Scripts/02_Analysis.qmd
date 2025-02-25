@@ -92,7 +92,7 @@ fonts()
 #--------- Distance wall ----------# 
 
 #For the total
-m_max_T_shield_dist = brm(max_T2 ~ dist_wall + (1|div), data = microclimate_shield_day)
+m_max_T_shield_dist = brm(max_T2_90 ~ dist_wall + (1|div), data = microclimate_shield_day)
 
 plot(m_max_T_shield_dist)
 summary(m_max_T_shield_dist)
@@ -101,53 +101,44 @@ pp_check(m_max_T_shield_dist)
 #--------- Day ----------# 
 
 #For the total
-m_max_T_shield_day = brm(max_T2_99 ~ midshield + (1|div), data = microclimate_shield_day)
+m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div) + (1|dist_wall), data = microclimate_shield_day)
 
 plot(m_max_T_shield_day)
-summary(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
+summary(m_max_T_shield_day)
 
 #Per day
 
-m_max_T_shield_date_day<- brm(max_T2_95 ~ midshield * Date + (1|div), data = microclimate_shield_date_day)
+m_max_T_shield_date_day<- brm(max_T2_95 ~ midshield * Date + (1|div) + (1|dist_wall), data = microclimate_shield_date_day)
 
 plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
 summary(m_max_T_shield_date_day)
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "Figure_pp_check.jpg")
-
-# Generate the pp_check plot and assign it to an object
-pp_plot <- pp_check(m_max_T_shield_day)
-
-# Save the plot as a high-resolution PNG
-ggsave(filename = output_file_plot1, 
-       plot = pp_plot, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
+parallel::detectCores()
 
 
 #--------- Night ----------# 
 
 #For the total
-m_max_T_shield = brm(max_T2 ~ midshield + (1|div), data = microclimate_shield_night)
+m_max_T_shield_night = brm(max_T2_90 ~ midshield + (1|div), data = microclimate_shield_night)
 
-plot(m_max_T_shield)
-summary(m_max_T_shield)
-pp_check(m_max_T_shield)
+plot(m_max_T_shield_night)
+summary(m_max_T_shield_night)
+pp_check(m_max_T_shield_night)
 
 #Per day
 
-m_max_T_shield_day<- brm(max_T2 ~ midshield * Date (1|div),
-  data = microclimate_shield_day
-)
+m_max_T_shield_date_day<- brm(max_T2 ~ midshield * Date + (1|div), data = microclimate_shield_date_day)
 
-plot(m_max_T_shield_day)
-pp_check(m_max_T_shield_day)
-summary(m_max_T_shield_day)
+plot(m_max_T_shield_date_day)
+pp_check(m_max_T_shield_date_day)
+summary(m_max_T_shield_date_day)
+
+
+
+
+
 
 # Save as JPG
 # Define the full file path for the plot
@@ -163,6 +154,20 @@ ggsave(filename = output_file_plot1,
        height = 6,       # Height in inches
        dpi = 300) 
 
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "Figure_pp_check.jpg")
+
+# Generate the pp_check plot and assign it to an object
+pp_plot <- pp_check(m_max_T_shield_day)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
 
 ```
 
