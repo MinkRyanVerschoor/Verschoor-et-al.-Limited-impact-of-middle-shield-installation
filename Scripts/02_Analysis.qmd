@@ -42,6 +42,9 @@ library(lme4)
 library(brms)
 library(extrafont)
 
+#CMDSTAN
+
+library(cmdstanr)
 
 
 ```
@@ -82,7 +85,7 @@ shield_colors <- c(
 
 
 loadfonts(device = "all")    # Loads the fonts
-fonts()
+
 ```
 
 ## Analysis
@@ -92,7 +95,7 @@ fonts()
 #--------- Distance wall ----------# 
 
 #For the total
-m_max_T_shield_dist = brm(max_T2_90 ~ dist_wall + (1|div), data = microclimate_shield_day)
+m_max_T_shield_dist = brm(max_T2_95 ~ dist_wall + (1|div), data = microclimate_shield_day)
 
 plot(m_max_T_shield_dist)
 summary(m_max_T_shield_dist)
@@ -101,7 +104,7 @@ pp_check(m_max_T_shield_dist)
 #--------- Day ----------# 
 
 #For the total
-m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div) + (1|dist_wall), data = microclimate_shield_day)
+m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_day)
 
 plot(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
@@ -109,19 +112,26 @@ summary(m_max_T_shield_day)
 
 #Per day
 
-m_max_T_shield_date_day<- brm(max_T2_95 ~ midshield * Date + (1|div) + (1|dist_wall), data = microclimate_shield_date_day)
+m_max_T_shield_date_day <- brm(
+  max_T2_95 ~ midshield * Date + (1|div),
+  data = microclimate_shield_date_day,
+  iter = 4000,  # Increase iterations
+  warmup = 2000,  # Increase warmup
+  chains = 2,  
+  threads = parallel::detectCores(), 
+  backend = "cmdstanr",
+  control = list(adapt_delta = 0.99, max_treedepth = 15)  # Improve sampling
+)
 
 plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
 summary(m_max_T_shield_date_day)
 
-parallel::detectCores()
-
 
 #--------- Night ----------# 
 
 #For the total
-m_max_T_shield_night = brm(max_T2_90 ~ midshield + (1|div), data = microclimate_shield_night)
+m_max_T_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night)
 
 plot(m_max_T_shield_night)
 summary(m_max_T_shield_night)
@@ -129,7 +139,7 @@ pp_check(m_max_T_shield_night)
 
 #Per day
 
-m_max_T_shield_date_day<- brm(max_T2 ~ midshield * Date + (1|div), data = microclimate_shield_date_day)
+m_max_T_shield_date_day<- brm(max_T2_95 ~ midshield * Date + (1|div), data = microclimate_shield_date_day)
 
 plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
