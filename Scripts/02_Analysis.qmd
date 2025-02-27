@@ -159,13 +159,8 @@ ggsave(filename = output_file_plot1,
 m_max_T_shield_date_day <- brm(
   max_T2_95 ~ midshield * Date + (1|div),
   data = microclimate_shield_date_day,
-  iter = 4000,  # Increase iterations
-  warmup = 2000,  # Increase warmup
-  chains = 4,  
-  #threads = parallel::detectCores(), 
-  #backend = "cmdstanr",
-  control = list(adapt_delta = 0.99, max_treedepth = 15)  # Improve sampling
-)
+  chains = 4)
+
 
 plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
