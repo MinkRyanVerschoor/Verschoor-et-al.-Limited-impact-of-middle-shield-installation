@@ -1,0 +1,24 @@
+ Family: gaussian 
+  Links: mu = identity; sigma = identity 
+Formula: max_T2_95 ~ midshield + (1 | div) 
+   Data: microclimate_shield_day (Number of observations: 346) 
+  Draws: 4 chains, each with iter = 2000; warmup = 1000; thin = 1;
+         total post-warmup draws = 4000
+
+Multilevel Hyperparameters:
+~div (Number of levels: 4) 
+              Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+sd(Intercept)     0.45      0.33     0.05     1.33 1.01      850     1050
+
+Regression Coefficients:
+                 Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+Intercept           31.75      0.27    31.20    32.29 1.00     1082     1263
+midshieldpresent    -0.23      0.20    -0.62     0.15 1.00     3131     2416
+
+Further Distributional Parameters:
+      Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+sigma     1.81      0.07     1.68     1.96 1.00     2528     2457
+
+Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
+and Tail_ESS are effective sample size measures, and Rhat is the potential
+scale reduction factor on split chains (at convergence, Rhat = 1).

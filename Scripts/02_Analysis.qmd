@@ -22,6 +22,9 @@ renv::restore()
 # Load configuration settings for collaborative data loading
 source("config.R")  
 
+# Define the output directory
+output_dir <- file.path(data_path, "/Figures")
+
 ```
 
 
@@ -101,6 +104,27 @@ plot(m_max_T_shield_dist)
 summary(m_max_T_shield_dist)
 pp_check(m_max_T_shield_dist)
 
+saveRDS(m_max_T_shield_dist, file = "m_max_T_shield_dist.rds")
+
+sink("m_max_T_shield_dist_summary.txt")
+print(summary(m_max_T_shield_dist))
+sink()
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_shield_dist_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_shield_dist_pp_plot <- pp_check(m_max_T_shield_dist)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_shield_dist_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
+
 #--------- Day ----------# 
 
 #For the total
@@ -110,16 +134,36 @@ plot(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
 summary(m_max_T_shield_day)
 
-#Per day
+saveRDS(m_max_T_shield_day, file = "m_max_T_shield_day.rds")
+
+sink("m_max_T_shield_day_summary.txt")
+print(summary(m_max_T_shield_day))
+sink()
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_shield_day_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_shield_day_pp_plot <- pp_check(m_max_T_shield_day)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_shield_day_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
+# ----------- Day Per day ----------# 
 
 m_max_T_shield_date_day <- brm(
   max_T2_95 ~ midshield * Date + (1|div),
   data = microclimate_shield_date_day,
   iter = 4000,  # Increase iterations
   warmup = 2000,  # Increase warmup
-  chains = 2,  
-  threads = parallel::detectCores(), 
-  backend = "cmdstanr",
+  chains = 4,  
+  #threads = parallel::detectCores(), 
+  #backend = "cmdstanr",
   control = list(adapt_delta = 0.99, max_treedepth = 15)  # Improve sampling
 )
 
@@ -127,6 +171,19 @@ plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
 summary(m_max_T_shield_date_day)
 
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_shield_day_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_shield_day_pp_plot <- pp_check(m_max_T_shield_day)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_shield_day_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
 
 #--------- Night ----------# 
 
@@ -134,10 +191,31 @@ summary(m_max_T_shield_date_day)
 m_max_T_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night)
 
 plot(m_max_T_shield_night)
-summary(m_max_T_shield_night)
 pp_check(m_max_T_shield_night)
+summary(m_max_T_shield_night)
 
-#Per day
+saveRDS(m_max_T_shield_night, file = "m_max_T_shield_night.rds")
+
+sink("m_max_T_shield_night_summary.txt")
+print(summary(m_max_T_shield_night))
+sink()
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_shield_night_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_shield_night_pp_plot <- pp_check(m_max_T_shield_night)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_shield_night_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
+
+# --------- Night Per day ---------- # 
 
 m_max_T_shield_date_day<- brm(max_T2_95 ~ midshield * Date + (1|div), data = microclimate_shield_date_day)
 
@@ -150,19 +228,6 @@ summary(m_max_T_shield_date_day)
 
 
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "Figure_pp_check.jpg")
-
-# Generate the pp_check plot and assign it to an object
-pp_plot <- pp_check(m_max_T_shield_day)
-
-# Save the plot as a high-resolution PNG
-ggsave(filename = output_file_plot1, 
-       plot = pp_plot, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
 
 
 # Save as JPG
