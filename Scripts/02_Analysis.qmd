@@ -43,12 +43,8 @@ library(ggsignif)
 library(patchwork)
 library(lme4)
 library(brms)
+library(emmeans)
 library(extrafont)
-
-#CMDSTAN
-
-library(cmdstanr)
-
 
 ```
 
@@ -71,6 +67,15 @@ microclimate_shield_date_night = load_data("microclimate_shield_date_night.csv")
 microclimate_shield_date_day$Date <- as.Date(microclimate_shield_date_day$Date)
 microclimate_shield_date_night$Date <- as.Date(microclimate_shield_date_night$Date)
 
+microclimate_shield_date_day$yday <- format(microclimate_shield_date_day$Date, "%j")
+microclimate_shield_date_day$yday = as.numeric(microclimate_shield_date_day$yday)
+
+microclimate_shield_date_night$yday <- format(microclimate_shield_date_night$Date, "%j")
+microclimate_shield_date_night$yday = as.numeric(microclimate_shield_date_night$yday)
+
+microclimate_shield_date_day$midshield_binomial<-as.integer(if_else(microclimate_shield_date_day$midshield=="present", 1, 0))
+
+microclimate_shield_date_night$midshield_binomial<-as.integer(if_else(microclimate_shield_date_night$midshield=="present", 1, 0))
 ```
 
 ## Setting up the color palette
@@ -156,25 +161,15 @@ ggsave(filename = output_file_plot1,
 
 # ----------- Day Per day ----------# 
 
-m_max_T_shield_date_day_test <- brm(
-  max_T2_95 ~ midshield + (1|div),
-  data = microclimate_shield_date_day,
-  chains = 4)
-
-plot(m_max_T_shield_date_day_test)
-pp_check(m_max_T_shield_date_day_test)
-summary(m_max_T_shield_date_day_test)
-
-saveRDS(m_max_T_shield_date_day, file = "m_max_T_shield_date_day.rds")
-
-sink("m_max_T_shield_date_day_summary.txt")
-print(summary(m_max_T_shield_date_day))
-sink()
+priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
 m_max_T_shield_date_day <- brm(
-  max_T2_95 ~ midshield * Date + (1|div),
+  max_T2_95 ~ midshield_binomial * yday + (1|div),
+  prior=priors,
   data = microclimate_shield_date_day,
-  chains = 4)
+  chains = 4, 
+  iter=4000,
+  warmup=1000)
 
 plot(m_max_T_shield_date_day)
 pp_check(m_max_T_shield_date_day)
@@ -232,11 +227,18 @@ ggsave(filename = output_file_plot1,
 
 # --------- Night Per day ---------- # 
 
-m_max_T_shield_date_night<- brm(max_T2_95 ~ midshield * Date + (1|div), data = microclimate_shield_date_night, chains = 4)
+priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
+
+m_max_T_shield_date_night <- brm(
+  max_T2_95 ~ midshield_binomial * yday + (1|div),
+  prior=priors,
+  data = microclimate_shield_date_night,
+  chains = 4, 
+  iter=200,
+  warmup=100)
 
 plot(m_max_T_shield_date_night)
 pp_check(m_max_T_shield_date_night)
-
 summary(m_max_T_shield_date_night)
 
 saveRDS(m_max_T_shield_date_night, file = "m_max_T_shield_date_night.rds")
