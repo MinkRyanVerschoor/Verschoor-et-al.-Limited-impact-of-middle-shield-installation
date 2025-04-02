@@ -1,25 +1,25 @@
  Family: gaussian 
   Links: mu = identity; sigma = identity 
-Formula: max_T2_95 ~ midshield * Date + (1 | div) 
+Formula: max_T2_95 ~ midshield_binomial * yday + (1 | div) 
    Data: microclimate_shield_date_night (Number of observations: 10713) 
-  Draws: 4 chains, each with iter = 2000; warmup = 1000; thin = 1;
-         total post-warmup draws = 4000
+  Draws: 4 chains, each with iter = 4000; warmup = 1000; thin = 1;
+         total post-warmup draws = 12000
 
 Multilevel Hyperparameters:
 ~div (Number of levels: 4) 
               Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-sd(Intercept)     5.51      6.81     0.00    18.58 3.24        4       12
+sd(Intercept)     0.21      0.20     0.05     0.70 1.00     2163     2781
 
 Regression Coefficients:
-                      Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-Intercept              1459.71     45.27  1374.23  1551.53 1.03      335      846
-midshieldpresent          0.38      1.46    -2.00     1.93 3.14        5       27
-Date                     -0.07      0.00    -0.08    -0.07 1.01      463      866
-midshieldpresent:Date    -0.00      0.00    -0.00     0.00 3.05        5       25
+                        Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
+Intercept                  36.56      0.62    35.33    37.76 1.00     7184     6686
+midshield_binomial          0.36      0.66    -0.71     1.92 1.00     5678     4648
+yday                       -0.07      0.00    -0.08    -0.07 1.00     8341     7234
+midshield_binomial:yday    -0.00      0.00    -0.01     0.00 1.00     5707     4590
 
 Further Distributional Parameters:
       Estimate Est.Error l-95% CI u-95% CI Rhat Bulk_ESS Tail_ESS
-sigma     2.05      0.01     2.03     2.08 1.00      207      520
+sigma     2.05      0.01     2.03     2.08 1.00     8294     7202
 
 Draws were sampled using sampling(NUTS). For each parameter, Bulk_ESS
 and Tail_ESS are effective sample size measures, and Rhat is the potential

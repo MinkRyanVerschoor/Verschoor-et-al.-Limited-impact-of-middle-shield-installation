@@ -234,8 +234,8 @@ m_max_T_shield_date_night <- brm(
   prior=priors,
   data = microclimate_shield_date_night,
   chains = 4, 
-  iter=200,
-  warmup=100)
+  iter=4000,
+  warmup=1000)
 
 plot(m_max_T_shield_date_night)
 pp_check(m_max_T_shield_date_night)
