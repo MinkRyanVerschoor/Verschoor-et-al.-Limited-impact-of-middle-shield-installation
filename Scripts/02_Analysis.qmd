@@ -133,7 +133,7 @@ ggsave(filename = output_file_plot1,
 #--------- Day ----------# 
 
 #For the total
-m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_day)
+m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div) + (1|dist_wall), data = microclimate_shield_day)
 
 plot(m_max_T_shield_day)
 pp_check(m_max_T_shield_day)
@@ -164,7 +164,7 @@ ggsave(filename = output_file_plot1,
 priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
 m_max_T_shield_date_day <- brm(
-  max_T2_95 ~ midshield_binomial * yday + (1|div),
+  max_T2_95 ~ midshield_binomial * yday + (1|div) + (1|dist_wall),
   prior=priors,
   data = microclimate_shield_date_day,
   chains = 4, 
@@ -198,7 +198,7 @@ ggsave(filename = output_file_plot1,
 #--------- Night ----------# 
 
 #For the total
-m_max_T_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night)
+m_max_T_shield_night = brm(max_T2_95 ~ midshield + (1|div) + (1|dist_wall), data = microclimate_shield_night)
 
 plot(m_max_T_shield_night)
 pp_check(m_max_T_shield_night)
@@ -230,7 +230,7 @@ ggsave(filename = output_file_plot1,
 priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
 m_max_T_shield_date_night <- brm(
-  max_T2_95 ~ midshield_binomial * yday + (1|div),
+  max_T2_95 ~ midshield_binomial * yday + (1|div) + (1|dist_wall),
   prior=priors,
   data = microclimate_shield_date_night,
   chains = 4, 
@@ -267,7 +267,9 @@ ggsave(filename = output_file_plot1,
 
 ```{r Plots}
 
-Plot_ST_shield = ggplot(microclimate_shield_day, aes(x = factor(dist_wall, levels = c('1', '2', '3', '4')), y = max_T2_95, color = dist_wall, fill = dist_wall)) +
+# ------- Daytime -------- # 
+
+Plot_ST_shield_day = ggplot(microclimate_shield_day, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2_95, color = midshield, fill = midshield)) +
   geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
   geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) + # Adjusted dot size and position
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
@@ -295,10 +297,10 @@ Plot_ST_shield = ggplot(microclimate_shield_day, aes(x = factor(dist_wall, level
   scale_color_manual(values = shield_colors) +
   scale_fill_manual(values = shield_colors) 
 
-Plot_ST_shield
+Plot_ST_shield_day
 
 
-Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
+Plot_ST_shield_day_date = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
   # Plot summary statistics (mean) with stat_summary
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16) + 
   
@@ -341,9 +343,91 @@ Plot_ST_day_shield = ggplot(microclimate_shield_day, aes(x = Date, y = max_T2, c
   scale_fill_manual(values = shield_colors)
 
 # Print the plot
-Plot_ST_day_shield
+Plot_ST_shield_day_date
 
-combined_plot <- Plot_ST_shield + Plot_ST_day_shield +
+# ------- Nighttime -------- # 
+
+Plot_ST_shield_night = ggplot(microclimate_shield_night, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2_95, color = midshield, fill = midshield)) +
+  geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
+  geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) + # Adjusted dot size and position
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
+               width = 0.3, position = position_dodge(width = 0.7)) +
+  labs(x = "Shield configuration", y = "Maximum temperature at 1cm (°C)") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.x = element_text(family = "Arial", size = 16,
+                                margin = margin(t = 10, r = 0, b = 0, l = 0)), # Adds 10 units of space to the bottom,
+    axis.title.y = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 0, r = 10, b = 0, l = 0)), # Adds 10 units of space to the right
+    legend.title = element_text(family = "Arial", size = 16),
+    legend.text = element_text(family = "Arial", size = 16),
+    legend.position = "none",
+    legend.key = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    panel.grid.minor = element_line(color = "gray", linetype = "dashed", size = 0.5) # Add minor gridlines
+  ) +
+  scale_x_discrete(expand = expansion(mult = c(0.1, 0.1))) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) 
+
+Plot_ST_shield_day
+
+
+Plot_ST_shield_night_date = ggplot(microclimate_shield_night, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) + 
+  # Plot summary statistics (mean) with stat_summary
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) + 
+  
+  # Add error bars (mean ± CI or SE) using stat_summary
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", 
+               width = 0.3) + 
+  
+  # Add a line connecting the mean points using stat_summary
+  stat_summary(fun = mean, geom = "line", size = 1, alpha = 0.7, aes(group = midshield)) + 
+  
+  # Customize labels and theme
+  labs(x = "Date", y = "Maximum daily temperature at 1cm (°C)") +
+  theme_classic() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.x = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 10, r = 0, b = 0, l = 0)),
+    axis.title.y = element_text(family = "Arial", size = 16, 
+                                margin = margin(t = 0, r = 10, b = 0, l = 0)), # Adds space between the label and axis
+    legend.title = element_text(family = "Arial", size = 16),
+    legend.text = element_text(family = "Arial", size = 16),
+    legend.position = "none",
+    legend.key = element_blank(),
+    panel.grid = element_blank(),
+    panel.border = element_blank(),
+    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+    panel.grid.minor = element_line(color = "gray", linetype = "dashed", size = 0.5) # Add minor gridlines
+  ) +
+  
+  # Customize the x-axis to handle Date as continuous and display all dates
+  scale_x_date(
+    breaks = scales::date_breaks("3 days"),  # Display every 2 days on the x-axis
+    labels = scales::date_format("%b %d"),  # Format the date labels as "Month Day"
+    expand = expansion(mult = c(0.05, 0.05))  # Add some space at both ends of the plot
+  ) +
+  
+  # Set color scale for midshield
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors)
+
+# Print the plot
+Plot_ST_shield_night_date
+
+
+
+
+
+combined_plot <- Plot_ST_shield_day + Plot_ST_shield_day_date + Plot_ST_shield_night+ Plot_ST_shield_night_date + 
   plot_layout(ncol = 2, widths = c(1, 1)) + 
   plot_annotation(tag_levels = "A")
 
