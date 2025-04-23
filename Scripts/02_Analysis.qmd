@@ -134,24 +134,28 @@ ggsave(filename = output_file_plot1,
        dpi = 300) 
 
 # Sensitivity analysis for Day Total
-m_max_T_90_shield_day <- update(m_max_T_shield_day, formula = max_T2_90 ~ .)
-m_max_T_99_shield_day <- update(m_max_T_shield_day, formula = max_T2_99 ~ .)
-m_max_T_abs_shield_day <- update(m_max_T_shield_day, formula = max_T2 ~ .)
+m_max_T_90_shield_day <- update(m_max_T_95_shield_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_day)
+m_max_T_99_shield_day <- update(m_max_T_95_shield_day, formula = max_T2_99 ~ ., newdata = microclimate_shield_day)
+m_max_T_abs_shield_day <- update(m_max_T_95_shield_day, formula = max_T2 ~ ., newdata = microclimate_shield_day)
 
 posterior_day_90 <- as_draws_df(m_max_T_90_shield_day)
-posterior_day_95 <- as_draws_df(m_max_T_shield_day)
+posterior_day_95 <- as_draws_df(m_max_T_95_shield_day)
 posterior_day_99 <- as_draws_df(m_max_T_99_shield_day)
 posterior_day_abs <- as_draws_df(m_max_T_abs_shield_day)
 
-mcmc_areas(
-  list(
-    "90th" = posterior_day_90$b_midshieldTRUE,
-    "95th" = posterior_day_95$b_midshieldTRUE,
-    "99th" = posterior_day_99$b_midshieldTRUE,
-    "Abs Max" = posterior_day_abs$b_midshieldTRUE
-  ),
-  prob = 0.95
+# Create a named list of draws for midshieldpresent from each model
+draws_list <- list(
+  "90th" = posterior_day_90$b_midshieldpresent,
+  "95th" = posterior_day_95$b_midshieldpresent,
+  "99th" = posterior_day_99$b_midshieldpresent,
+  "Abs Max" = posterior_day_abs$b_midshieldpresent
 )
+
+# Convert to matrix where each column is a chain
+draws_matrix <- do.call(cbind, draws_list)
+
+# Use mcmc_areas
+mcmc_areas(draws_matrix, prob = 0.95)
 
 ```
 
@@ -193,27 +197,29 @@ ggsave(filename = output_file_plot1,
        height = 6,       # Height in inches
        dpi = 300) 
 
-# Sensitivity analysis
+# Sensitivity analysis for Day per day
+m_max_T_90_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_day)
+m_max_T_99_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2_99 ~ ., newdata = microclimate_shield_date_day)
+m_max_T_abs_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2 ~ ., newdata = microclimate_shield_date_day)
 
-m_max_T_90_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2_90 ~ .)
-m_max_T_99_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2_99 ~ .)
-m_max_T_abs_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2 ~ .)
+posterior_date_day_90 <- as_draws_df(m_max_T_90_shield_date_day)
+posterior_date_day_95 <- as_draws_df(m_max_T_95_shield_date_day)
+posterior_date_day_99 <- as_draws_df(m_max_T_99_shield_date_day)
+posterior_date_day_abs <- as_draws_df(m_max_T_shield_date_day)
 
-posterior_90 <- as_draws_df(m_max_T_90_shield_date_day)
-posterior_95 <- as_draws_df(m_max_T_95_shield_date_day)
-posterior_99 <- as_draws_df(m_max_T_99_shield_date_day)
-posterior_abs <- as_draws_df(m_max_T_abs_shield_date_day)
-
-# Example: Comparing the coefficient for midshield_binomialTRUE
-mcmc_areas(
-  list(
-    "90th" = posterior_90$b_midshield_binomialTRUE,
-    "95th" = posterior_95$b_midshield_binomialTRUE,
-    "99th" = posterior_99$b_midshield_binomialTRUE,
-    "Abs Max" = posterior_abs$b_midshield_binomialTRUE
-  ),
-  prob = 0.95
+# Create a named list of draws for midshieldpresent from each model
+draws_list <- list(
+  "90th" = posterior_date_day_90$b_midshieldpresent,
+  "95th" = posterior_date_day_95$b_midshieldpresent,
+  "99th" = posterior_date_day_99$b_midshieldpresent,
+  "Abs Max" = posterior_date_day_abs$b_midshieldpresent
 )
+
+# Convert to matrix where each column is a chain
+draws_matrix <- do.call(cbind, draws_list)
+
+# Use mcmc_areas
+mcmc_areas(draws_matrix, prob = 0.95)
 
 
 ```
