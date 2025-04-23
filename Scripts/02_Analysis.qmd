@@ -45,6 +45,8 @@ library(lme4)
 library(brms)
 library(emmeans)
 library(extrafont)
+library(bayesplot)
+library(posterior)
 
 ```
 
@@ -98,76 +100,68 @@ loadfonts(device = "all")    # Loads the fonts
 
 ## Analysis
 
-```{r Analysis}
-
-#--------- Distance wall ----------# 
-
-#For the total
-m_max_T_shield_dist = brm(max_T2_95 ~ dist_wall + (1|div), data = microclimate_shield_day,   chains = 4, 
-  iter=4000,
-  warmup=1000)
-
-plot(m_max_T_shield_dist)
-summary(m_max_T_shield_dist)
-pp_check(m_max_T_shield_dist)
-
-saveRDS(m_max_T_shield_dist, file = "m_max_T_shield_dist.rds")
-
-sink("m_max_T_shield_dist_summary.txt")
-print(summary(m_max_T_shield_dist))
-sink()
-
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_shield_dist_pp_plot.jpg")
-
-# Generate the pp_check plot and assign it to an object
-m_max_T_shield_dist_pp_plot <- pp_check(m_max_T_shield_dist)
-
-# Save the plot as a high-resolution PNG
-ggsave(filename = output_file_plot1, 
-       plot = m_max_T_shield_dist_pp_plot, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
-
+```{r Analysis day total}
 
 #--------- Day ----------# 
 
 #For the total
-m_max_T_shield_day = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_day,   chains = 4, 
+m_max_T_95_shield_day = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_day,   chains = 4, 
   iter=4000,
   warmup=1000)
 
-plot(m_max_T_shield_day)
-pp_check(m_max_T_shield_day)
-summary(m_max_T_shield_day)
+plot(m_max_T_95_shield_day)
+pp_check(m_max_T_95_shield_day)
+summary(m_max_T_95_shield_day)
 
-saveRDS(m_max_T_shield_day, file = "m_max_T_shield_day.rds")
+saveRDS(m_max_T_95_shield_day, file = "m_max_T_95_shield_day.rds")
 
-sink("m_max_T_shield_day_summary.txt")
-print(summary(m_max_T_shield_day))
+sink("m_max_T_95_shield_day_summary.txt")
+print(summary(m_max_T_95_shield_day))
 sink()
 
 # Save as JPG
 # Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_shield_day_pp_plot.jpg")
+output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_day_pp_plot.jpg")
 
 # Generate the pp_check plot and assign it to an object
-m_max_T_shield_day_pp_plot <- pp_check(m_max_T_shield_day)
+m_max_T_95_shield_day_pp_plot <- pp_check(m_max_T_95_shield_day)
 
 # Save the plot as a high-resolution PNG
 ggsave(filename = output_file_plot1, 
-       plot = m_max_T_shield_day_pp_plot, 
+       plot = m_max_T_95_shield_day_pp_plot, 
        width = 8,        # Width in inches
        height = 6,       # Height in inches
        dpi = 300) 
+
+# Sensitivity analysis for Day Total
+m_max_T_90_shield_day <- update(m_max_T_shield_day, formula = max_T2_90 ~ .)
+m_max_T_99_shield_day <- update(m_max_T_shield_day, formula = max_T2_99 ~ .)
+m_max_T_abs_shield_day <- update(m_max_T_shield_day, formula = max_T2 ~ .)
+
+posterior_day_90 <- as_draws_df(m_max_T_90_shield_day)
+posterior_day_95 <- as_draws_df(m_max_T_shield_day)
+posterior_day_99 <- as_draws_df(m_max_T_99_shield_day)
+posterior_day_abs <- as_draws_df(m_max_T_abs_shield_day)
+
+mcmc_areas(
+  list(
+    "90th" = posterior_day_90$b_midshieldTRUE,
+    "95th" = posterior_day_95$b_midshieldTRUE,
+    "99th" = posterior_day_99$b_midshieldTRUE,
+    "Abs Max" = posterior_day_abs$b_midshieldTRUE
+  ),
+  prob = 0.95
+)
+
+```
+
+```{r Analysis day per day}
 
 # ----------- Day Per day ----------# 
 
 priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
-m_max_T_shield_date_day <- brm(
+m_max_T_95_shield_date_day <- brm(
   max_T2_95 ~ midshield_binomial * yday + (1|div),
   prior=priors,
   data = microclimate_shield_date_day,
@@ -175,35 +169,56 @@ m_max_T_shield_date_day <- brm(
   iter=4000,
   warmup=1000)
 
-pp_check(m_max_T_shield_date_day, type = "dens_overlay")
+plot(m_max_T_95_shield_date_day)
+pp_check(m_max_T_95_shield_date_day)
+summary(m_max_T_95_shield_date_day)
 
-pp_check(m_max_T_shield_date_day, type = "stat", stat = "mean")
+saveRDS(m_max_T_95_shield_date_day, file = "m_max_T_95_shield_date_day.rds")
 
-plot(marginal_effects(m_max_T_shield_date_day))
-
-plot(m_max_T_shield_date_day)
-pp_check(m_max_T_shield_date_day)
-summary(m_max_T_shield_date_day)
-
-saveRDS(m_max_T_shield_date_day, file = "m_max_T_shield_date_day.rds")
-
-sink("m_max_T_shield_date_day_summary.txt")
-print(summary(m_max_T_shield_date_day))
+sink("m_max_T_95_shield_date_day_summary.txt")
+print(summary(m_max_T_95_shield_date_day))
 sink()
 
 # Save as JPG
 # Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_shield_date_day_pp_plot.jpg")
+output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_date_day_pp_plot.jpg")
 
 # Generate the pp_check plot and assign it to an object
-m_max_T_shield_date_day_pp_plot <- pp_check(m_max_T_shield_date_day)
+m_max_T_95_shield_date_day_pp_plot <- pp_check(m_max_T_95_shield_date_day)
 
 # Save the plot as a high-resolution PNG
 ggsave(filename = output_file_plot1, 
-       plot = m_max_T_shield_date_day_pp_plot, 
+       plot = m_max_T_95_shield_date_day_pp_plot, 
        width = 8,        # Width in inches
        height = 6,       # Height in inches
        dpi = 300) 
+
+# Sensitivity analysis
+
+m_max_T_90_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2_90 ~ .)
+m_max_T_99_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2_99 ~ .)
+m_max_T_abs_shield_date_day <- update(m_max_T_shield_date_day, formula = max_T2 ~ .)
+
+posterior_90 <- as_draws_df(m_max_T_90_shield_date_day)
+posterior_95 <- as_draws_df(m_max_T_95_shield_date_day)
+posterior_99 <- as_draws_df(m_max_T_99_shield_date_day)
+posterior_abs <- as_draws_df(m_max_T_abs_shield_date_day)
+
+# Example: Comparing the coefficient for midshield_binomialTRUE
+mcmc_areas(
+  list(
+    "90th" = posterior_90$b_midshield_binomialTRUE,
+    "95th" = posterior_95$b_midshield_binomialTRUE,
+    "99th" = posterior_99$b_midshield_binomialTRUE,
+    "Abs Max" = posterior_abs$b_midshield_binomialTRUE
+  ),
+  prob = 0.95
+)
+
+
+```
+
+```{r Analysis night total}
 
 #--------- Night ----------# 
 
@@ -236,6 +251,29 @@ ggsave(filename = output_file_plot1,
        height = 6,       # Height in inches
        dpi = 300) 
 
+# Sensitivity analysis for Night Total
+m_max_T_90_shield_night <- update(m_max_T_shield_night, formula = max_T2_90 ~ .)
+m_max_T_99_shield_night <- update(m_max_T_shield_night, formula = max_T2_99 ~ .)
+m_max_T_abs_shield_night <- update(m_max_T_shield_night, formula = max_T2 ~ .)
+
+posterior_night_90 <- as_draws_df(m_max_T_90_shield_night)
+posterior_night_95 <- as_draws_df(m_max_T_shield_night)
+posterior_night_99 <- as_draws_df(m_max_T_99_shield_night)
+posterior_night_abs <- as_draws_df(m_max_T_abs_shield_night)
+
+mcmc_areas(
+  list(
+    "90th" = posterior_night_90$b_midshieldTRUE,
+    "95th" = posterior_night_95$b_midshieldTRUE,
+    "99th" = posterior_night_99$b_midshieldTRUE,
+    "Abs Max" = posterior_night_abs$b_midshieldTRUE
+  ),
+  prob = 0.95
+)
+
+```
+
+```{r Analysis night per day}
 
 # --------- Night Per day ---------- # 
 
@@ -273,7 +311,46 @@ ggsave(filename = output_file_plot1,
        height = 6,       # Height in inches
        dpi = 300) 
 
+
 ```
+
+```{r Analysis spatial heterogenity}
+
+#--------- Distance wall ----------# 
+
+#For the total
+m_max_T_shield_dist = brm(max_T2_95 ~ dist_wall + (1|div), data = microclimate_shield_day,   chains = 4, 
+  iter=4000,
+  warmup=1000)
+
+plot(m_max_T_shield_dist)
+summary(m_max_T_shield_dist)
+pp_check(m_max_T_shield_dist)
+
+saveRDS(m_max_T_shield_dist, file = "m_max_T_shield_dist.rds")
+
+sink("m_max_T_shield_dist_summary.txt")
+print(summary(m_max_T_shield_dist))
+sink()
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_shield_dist_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_shield_dist_pp_plot <- pp_check(m_max_T_shield_dist)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_shield_dist_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
+
+
+```
+
 
 ## Plots
 
