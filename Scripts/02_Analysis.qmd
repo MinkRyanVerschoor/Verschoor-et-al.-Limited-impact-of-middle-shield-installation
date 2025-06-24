@@ -100,7 +100,7 @@ loadfonts(device = "all")    # Loads the fonts
 
 ## Analysis
 
-```{r Analysis day total}
+```{r Analysis day month}
 
 #--------- Day ----------# 
 
@@ -133,10 +133,30 @@ ggsave(filename = output_file_plot1,
        height = 6,       # Height in inches
        dpi = 300) 
 
-# Sensitivity analysis for Day Total
+# Sensitivity analysis for Day per day
 m_max_T_90_shield_day <- update(m_max_T_95_shield_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_day)
+
+saveRDS(m_max_T_90_shield_day, file = "m_max_T_90_shield_day.rds")
+
+sink("m_max_T_90_shield_day_summary.txt")
+print(summary(m_max_T_90_shield_day))
+sink()
+
 m_max_T_99_shield_day <- update(m_max_T_95_shield_day, formula = max_T2_99 ~ ., newdata = microclimate_shield_day)
+
+saveRDS(m_max_T_99_shield_day, file = "m_max_T_99_shield_day.rds")
+
+sink("m_max_T_99_shield_day_summary.txt")
+print(summary(m_max_T_99_shield_day))
+sink()
+
 m_max_T_abs_shield_day <- update(m_max_T_95_shield_day, formula = max_T2 ~ ., newdata = microclimate_shield_day)
+
+saveRDS(m_max_T_abs_shield_day, file = "m_max_T_abs_shield_day.rds")
+
+sink("m_max_T_abs_shield_day_summary.txt")
+print(summary(m_max_T_abs_shield_day))
+sink()
 
 posterior_day_90 <- as_draws_df(m_max_T_90_shield_day)
 posterior_day_95 <- as_draws_df(m_max_T_95_shield_day)
@@ -155,7 +175,20 @@ draws_list <- list(
 draws_matrix <- do.call(cbind, draws_list)
 
 # Use mcmc_areas
-mcmc_areas(draws_matrix, prob = 0.95)
+comparison_plot_day = mcmc_areas(draws_matrix, prob = 0.95)
+
+comparison_plot_day
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "comparison_plot_day.jpg")
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = comparison_plot_day, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
 
 ```
 
@@ -198,84 +231,151 @@ ggsave(filename = output_file_plot1,
        dpi = 300) 
 
 # Sensitivity analysis for Day per day
-m_max_T_90_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_day)
+m_max_T_90_shield_date_day <- update(m_max_T_90_shield_date_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_day)
+
+saveRDS(m_max_T_90_shield_date_day, file = "m_max_T_90_shield_date_day.rds")
+
+sink("m_max_T_90_shield_date_day_summary.txt")
+print(summary(m_max_T_90_shield_date_day))
+sink()
+
 m_max_T_99_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2_99 ~ ., newdata = microclimate_shield_date_day)
+
+saveRDS(m_max_T_99_shield_date_day, file = "m_max_T_99_shield_date_day.rds")
+
+sink("m_max_T_99_shield_date_day_summary.txt")
+print(summary(m_max_T_99_shield_date_day))
+sink()
+
 m_max_T_abs_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2 ~ ., newdata = microclimate_shield_date_day)
+
+saveRDS(m_max_T_abs_shield_date_day, file = "m_max_T_abs_shield_date_day.rds")
+
+sink("m_max_T_abs_shield_date_day_summary.txt")
+print(summary(m_max_T_abs_shield_date_day))
+sink()
 
 posterior_date_day_90 <- as_draws_df(m_max_T_90_shield_date_day)
 posterior_date_day_95 <- as_draws_df(m_max_T_95_shield_date_day)
 posterior_date_day_99 <- as_draws_df(m_max_T_99_shield_date_day)
-posterior_date_day_abs <- as_draws_df(m_max_T_shield_date_day)
+posterior_date_day_abs <- as_draws_df(m_max_T_abs_shield_date_day)
 
 # Create a named list of draws for midshieldpresent from each model
 draws_list <- list(
-  "90th" = posterior_date_day_90$b_midshieldpresent,
-  "95th" = posterior_date_day_95$b_midshieldpresent,
-  "99th" = posterior_date_day_99$b_midshieldpresent,
-  "Abs Max" = posterior_date_day_abs$b_midshieldpresent
+  "90th" = posterior_date_day_90$b_midshield_binomial,
+  "95th" = posterior_date_day_95$b_midshield_binomial,
+  "99th" = posterior_date_day_99$b_midshield_binomial,
+  "Abs Max" = posterior_date_day_abs$b_midshield_binomial
 )
 
 # Convert to matrix where each column is a chain
 draws_matrix <- do.call(cbind, draws_list)
 
 # Use mcmc_areas
-mcmc_areas(draws_matrix, prob = 0.95)
-
-
-```
-
-```{r Analysis night total}
-
-#--------- Night ----------# 
-
-#For the total
-m_max_T_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night,   chains = 4, 
-  iter=4000,
-  warmup=1000)
-
-plot(m_max_T_shield_night)
-pp_check(m_max_T_shield_night)
-summary(m_max_T_shield_night)
-
-saveRDS(m_max_T_shield_night, file = "m_max_T_shield_night.rds")
-
-sink("m_max_T_shield_night_summary.txt")
-print(summary(m_max_T_shield_night))
-sink()
+comparison_plot_date_day = mcmc_areas(draws_matrix, prob = 0.95)
 
 # Save as JPG
 # Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_shield_night_pp_plot.jpg")
-
-# Generate the pp_check plot and assign it to an object
-m_max_T_shield_night_pp_plot <- pp_check(m_max_T_shield_night)
+output_file_plot1 <- file.path(output_dir, "comparison_plot_date_day.jpg")
 
 # Save the plot as a high-resolution PNG
 ggsave(filename = output_file_plot1, 
-       plot = m_max_T_shield_night_pp_plot, 
+       plot = comparison_plot_date_day, 
        width = 8,        # Width in inches
        height = 6,       # Height in inches
        dpi = 300) 
 
-# Sensitivity analysis for Night Total
-m_max_T_90_shield_night <- update(m_max_T_shield_night, formula = max_T2_90 ~ .)
-m_max_T_99_shield_night <- update(m_max_T_shield_night, formula = max_T2_99 ~ .)
-m_max_T_abs_shield_night <- update(m_max_T_shield_night, formula = max_T2 ~ .)
+```
+
+```{r Analysis night month}
+
+#--------- Night ----------# 
+
+#For the total
+m_max_T_95_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night,   chains = 4, 
+  iter=4000,
+  warmup=1000)
+
+plot(m_max_T_95_shield_night)
+pp_check(m_max_T_95_shield_night)
+summary(m_max_T_95_shield_night)
+
+saveRDS(m_max_T_95_shield_night, file = "m_max_T_95_shield_night.rds")
+
+sink("m_max_T_95_shield_night_summary.txt")
+print(summary(m_max_T_95_shield_night))
+sink()
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_night_pp_plot.jpg")
+
+# Generate the pp_check plot and assign it to an object
+m_max_T_95_shield_night_pp_plot <- pp_check(m_max_T_95_shield_night)
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = m_max_T_95_shield_night_pp_plot, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
+
+# Sensitivity analysis for Day per day
+m_max_T_90_shield_night <- update(m_max_T_95_shield_night, formula = max_T2_90 ~ ., newdata = microclimate_shield_night)
+
+saveRDS(m_max_T_90_shield_night, file = "m_max_T_90_shield_night.rds")
+
+sink("m_max_T_90_shield_night_summary.txt")
+print(summary(m_max_T_90_shield_night))
+sink()
+
+m_max_T_99_shield_night <- update(m_max_T_95_shield_night, formula = max_T2_99 ~ ., newdata = microclimate_shield_night)
+
+saveRDS(m_max_T_99_shield_night, file = "m_max_T_99_shield_night.rds")
+
+sink("m_max_T_99_shield_night_summary.txt")
+print(summary(m_max_T_99_shield_night))
+sink()
+
+m_max_T_abs_shield_night <- update(m_max_T_95_shield_night, formula = max_T2 ~ ., newdata = microclimate_shield_night)
+
+saveRDS(m_max_T_abs_shield_night, file = "m_max_T_abs_shield_night.rds")
+
+sink("m_max_T_abs_shield_night_summary.txt")
+print(summary(m_max_T_abs_shield_night))
+sink()
 
 posterior_night_90 <- as_draws_df(m_max_T_90_shield_night)
-posterior_night_95 <- as_draws_df(m_max_T_shield_night)
+posterior_night_95 <- as_draws_df(m_max_T_95_shield_night)
 posterior_night_99 <- as_draws_df(m_max_T_99_shield_night)
 posterior_night_abs <- as_draws_df(m_max_T_abs_shield_night)
 
-mcmc_areas(
-  list(
-    "90th" = posterior_night_90$b_midshieldTRUE,
-    "95th" = posterior_night_95$b_midshieldTRUE,
-    "99th" = posterior_night_99$b_midshieldTRUE,
-    "Abs Max" = posterior_night_abs$b_midshieldTRUE
-  ),
-  prob = 0.95
+# Create a named list of draws for midshieldpresent from each model
+draws_list <- list(
+  "90th" = posterior_night_90$b_midshieldpresent,
+  "95th" = posterior_night_95$b_midshieldpresent,
+  "99th" = posterior_night_99$b_midshieldpresent,
+  "Abs Max" = posterior_night_abs$b_midshieldpresent
 )
+
+# Convert to matrix where each column is a chain
+draws_matrix <- do.call(cbind, draws_list)
+
+# Use mcmc_areas
+comparison_plot_night = mcmc_areas(draws_matrix, prob = 0.95)
+
+comparison_plot_night
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "comparison_plot_night.jpg")
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = comparison_plot_night, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
 
 ```
 
@@ -285,7 +385,7 @@ mcmc_areas(
 
 priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
-m_max_T_shield_date_night <- brm(
+m_max_T_95_shield_date_night <- brm(
   max_T2_95 ~ midshield_binomial * yday + (1|div),
   prior=priors,
   data = microclimate_shield_date_night,
@@ -293,30 +393,86 @@ m_max_T_shield_date_night <- brm(
   iter=4000,
   warmup=1000)
 
-plot(m_max_T_shield_date_night)
-pp_check(m_max_T_shield_date_night)
-summary(m_max_T_shield_date_night)
+plot(m_max_T_95_shield_date_night)
+pp_check(m_max_T_95_shield_date_night)
+summary(m_max_T_95_shield_date_night)
 
-saveRDS(m_max_T_shield_date_night, file = "m_max_T_shield_date_night.rds")
+saveRDS(m_max_T_95_shield_date_night, file = "m_max_T_95_shield_date_night.rds")
 
-sink("m_max_T_shield_date_night_summary.txt")
-print(summary(m_max_T_shield_date_night))
+sink("m_max_T_95_shield_date_night_summary.txt")
+print(summary(m_max_T_95_shield_date_night))
 sink()
 
 # Save as JPG
 # Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_shield_date_night_pp_plot.jpg")
+output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_date_night_pp_plot.jpg")
 
 # Generate the pp_check plot and assign it to an object
-m_max_T_shield_date_night_pp_plot <- pp_check(m_max_T_shield_date_night)
+m_max_T_95_shield_date_night_pp_plot <- pp_check(m_max_T_95_shield_date_night)
 
 # Save the plot as a high-resolution PNG
 ggsave(filename = output_file_plot1, 
-       plot = m_max_T_shield_date_night_pp_plot, 
+       plot = m_max_T_95_shield_date_night_pp_plot, 
        width = 8,        # Width in inches
        height = 6,       # Height in inches
        dpi = 300) 
 
+# Sensitivity analysis for night per night
+m_max_T_90_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_night)
+
+saveRDS(m_max_T_90_shield_date_night, file = "m_max_T_90_shield_date_night.rds")
+
+sink("m_max_T_90_shield_date_night_summary.txt")
+print(summary(m_max_T_90_shield_date_night))
+sink()
+
+m_max_T_99_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2_99 ~ ., newdata = microclimate_shield_date_night)
+
+saveRDS(m_max_T_99_shield_date_night, file = "m_max_T_99_shield_date_night.rds")
+
+sink("m_max_T_99_shield_date_night_summary.txt")
+print(summary(m_max_T_99_shield_date_night))
+sink()
+
+m_max_T_abs_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2 ~ ., newdata = microclimate_shield_date_night)
+
+saveRDS(m_max_T_abs_shield_date_night, file = "m_max_T_abs_shield_date_night.rds")
+
+sink("m_max_T_abs_shield_date_night_summary.txt")
+print(summary(m_max_T_abs_shield_date_night))
+sink()
+
+posterior_date_night_90 <- as_draws_df(m_max_T_90_shield_date_night)
+posterior_date_night_95 <- as_draws_df(m_max_T_95_shield_date_night)
+posterior_date_night_99 <- as_draws_df(m_max_T_99_shield_date_night)
+posterior_date_night_abs <- as_draws_df(m_max_T_abs_shield_date_night)
+
+# Create a named list of draws for midshieldpresent from each model
+draws_list <- list(
+  "90th" = posterior_date_night_90$b_midshield_binomial,
+  "95th" = posterior_date_night_95$b_midshield_binomial,
+  "99th" = posterior_date_night_99$b_midshield_binomial,
+  "Abs Max" = posterior_date_night_abs$b_midshield_binomial
+)
+
+# Convert to matrix where each column is a chain
+draws_matrix <- do.call(cbind, draws_list)
+
+# Use mcmc_areas
+comparison_plot_date_night = mcmc_areas(draws_matrix, prob = 0.95)
+
+comparison_plot_date_night
+
+# Save as JPG
+# Define the full file path for the plot
+output_file_plot1 <- file.path(output_dir, "comparison_plot_date_night.jpg")
+
+# Save the plot as a high-resolution PNG
+ggsave(filename = output_file_plot1, 
+       plot = comparison_plot_date_night, 
+       width = 8,        # Width in inches
+       height = 6,       # Height in inches
+       dpi = 300) 
 
 ```
 
