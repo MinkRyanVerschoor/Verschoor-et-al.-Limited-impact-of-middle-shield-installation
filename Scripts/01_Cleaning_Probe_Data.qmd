@@ -242,28 +242,33 @@ microclimate_shield_total_day <- microclimate_shield_total_day %>%
   ) |> 
   left_join(bioclive_design)
 
-# Calculate the max per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
+# Calculate the min per probe, the mean per probe for the total period, but group only by 'subplot' and 'Date'
 microclimate_shield_total_night <- microclimate_shield_night %>%
-  group_by(subplot) %>%  # Group by subplot and Date only
+  group_by(subplot) %>%
   dplyr::summarise(
+    # absolute mins
     min_SWC = min(SWC, na.rm = TRUE),
-    max_T1 = max(T1, na.rm = TRUE),
-    max_T2 = max(T2, na.rm = TRUE),
-    max_T3 = max(T3, na.rm = TRUE),
+    min_T1 = min(T1, na.rm = TRUE),
+    min_T2 = min(T2, na.rm = TRUE),
+    min_T3 = min(T3, na.rm = TRUE),
+
+    # Lower quarantines (cold extremes)
+    min_T1_01 = quantile(T1, 0.01, na.rm = TRUE),
+    min_T2_01 = quantile(T2, 0.01, na.rm = TRUE),
+    min_T3_01 = quantile(T3, 0.01, na.rm = TRUE),
+    min_T1_05 = quantile(T1, 0.05, na.rm = TRUE),
+    min_T2_05 = quantile(T2, 0.05, na.rm = TRUE),
+    min_T3_05 = quantile(T3, 0.05, na.rm = TRUE),
+    min_T1_10 = quantile(T1, 0.10, na.rm = TRUE),
+    min_T2_10 = quantile(T2, 0.10, na.rm = TRUE),
+    min_T3_10 = quantile(T3, 0.10, na.rm = TRUE),
+    
+   # SWC quantiles
     min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
-    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
-    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
-    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
     min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
-    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
-    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
-    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
-    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
-    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
-    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
-    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE)
   ) %>%
-  ungroup()  # Ungroup after summarisation
+  ungroup()
 
 # Now join the original data back to keep 'probe' and 'midshield' columns
 microclimate_shield_total_night <- microclimate_shield_total_night %>%
@@ -274,7 +279,6 @@ microclimate_shield_total_night <- microclimate_shield_total_night %>%
     by = c("subplot")
   ) |> 
   left_join(bioclive_design)
-
 
 
 ```
@@ -320,24 +324,29 @@ microclimate_shield_date_day <- microclimate_shield_date_day %>%
 microclimate_shield_date_night <- microclimate_shield_night %>%
   group_by(subplot, Date) %>%  # Group by subplot and Date only
   dplyr::summarise(
+    # absolute mins
     min_SWC = min(SWC, na.rm = TRUE),
-    max_T1 = max(T1, na.rm = TRUE),
-    max_T2 = max(T2, na.rm = TRUE),
-    max_T3 = max(T3, na.rm = TRUE),
+    min_T1 = min(T1, na.rm = TRUE),
+    min_T2 = min(T2, na.rm = TRUE),
+    min_T3 = min(T3, na.rm = TRUE),
+
+    # Lower quarantines (cold extremes)
+    min_T1_01 = quantile(T1, 0.01, na.rm = TRUE),
+    min_T2_01 = quantile(T2, 0.01, na.rm = TRUE),
+    min_T3_01 = quantile(T3, 0.01, na.rm = TRUE),
+    min_T1_05 = quantile(T1, 0.05, na.rm = TRUE),
+    min_T2_05 = quantile(T2, 0.05, na.rm = TRUE),
+    min_T3_05 = quantile(T3, 0.05, na.rm = TRUE),
+    min_T1_10 = quantile(T1, 0.10, na.rm = TRUE),
+    min_T2_10 = quantile(T2, 0.10, na.rm = TRUE),
+    min_T3_10 = quantile(T3, 0.10, na.rm = TRUE),
+    
+   # SWC quantiles
     min_SWC_1 = quantile(SWC, 0.01, na.rm = TRUE),
-    max_T1_99 = quantile(T1, 0.99, na.rm = TRUE),
-    max_T2_99 = quantile(T2, 0.99, na.rm = TRUE),
-    max_T3_99 = quantile(T3, 0.99, na.rm = TRUE),
     min_SWC_5 = quantile(SWC, 0.05, na.rm = TRUE),
-    max_T1_95 = quantile(T1, 0.95, na.rm = TRUE),
-    max_T2_95 = quantile(T2, 0.95, na.rm = TRUE),
-    max_T3_95 = quantile(T3, 0.95, na.rm = TRUE),
-    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE),
-    max_T1_90 = quantile(T1, 0.90, na.rm = TRUE),
-    max_T2_90 = quantile(T2, 0.90, na.rm = TRUE),
-    max_T3_90 = quantile(T3, 0.90, na.rm = TRUE)
+    min_SWC_10 = quantile(SWC, 0.10, na.rm = TRUE)
   ) %>%
-  ungroup()  # Ungroup after summarisation
+  ungroup()
 
 # Now join the original data back to keep 'probe' and 'midshield' columns
 microclimate_shield_date_night <- microclimate_shield_date_night %>%
