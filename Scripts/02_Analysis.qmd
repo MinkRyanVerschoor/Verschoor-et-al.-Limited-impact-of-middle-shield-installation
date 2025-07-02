@@ -230,7 +230,7 @@ ggsave(filename = output_file_plot1,
        dpi = 300) 
 
 # Sensitivity analysis for Day per day
-m_max_T_90_shield_date_day <- update(m_max_T_90_shield_date_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_day)
+m_max_T_90_shield_date_day <- update(m_max_T_95_shield_date_day, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_day)
 
 saveRDS(m_max_T_90_shield_date_day, file = "m_max_T_90_shield_date_day.rds")
 
