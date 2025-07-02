@@ -289,189 +289,163 @@ ggsave(filename = output_file_plot1,
 ```{r Analysis night month}
 
 #--------- Night ----------# 
+# Base model using the 5th percentile
+m_min_T_05_shield_night = brm(min_T2_05 ~ midshield + (1|div), 
+                              data = microclimate_shield_night,   
+                              chains = 4, 
+                              iter = 4000,
+                              warmup = 1000)
 
-#For the total
-m_max_T_95_shield_night = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_night,   chains = 4, 
-  iter=4000,
-  warmup=1000)
+plot(m_min_T_05_shield_night)
+pp_check(m_min_T_05_shield_night)
+summary(m_min_T_05_shield_night)
 
-plot(m_max_T_95_shield_night)
-pp_check(m_max_T_95_shield_night)
-summary(m_max_T_95_shield_night)
+saveRDS(m_min_T_05_shield_night, file = "m_min_T_05_shield_night.rds")
 
-saveRDS(m_max_T_95_shield_night, file = "m_max_T_95_shield_night.rds")
-
-sink("m_max_T_95_shield_night_summary.txt")
-print(summary(m_max_T_95_shield_night))
+sink("m_min_T_05_shield_night_summary.txt")
+print(summary(m_min_T_05_shield_night))
 sink()
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_night_pp_plot.jpg")
+# Save posterior predictive check plot
+output_file_plot1 <- file.path(output_dir, "m_min_T_05_shield_night_pp_plot.jpg")
+m_min_T_05_shield_night_pp_plot <- pp_check(m_min_T_05_shield_night)
 
-# Generate the pp_check plot and assign it to an object
-m_max_T_95_shield_night_pp_plot <- pp_check(m_max_T_95_shield_night)
-
-# Save the plot as a high-resolution PNG
 ggsave(filename = output_file_plot1, 
-       plot = m_max_T_95_shield_night_pp_plot, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
+       plot = m_min_T_05_shield_night_pp_plot, 
+       width = 8, height = 6, dpi = 300)
 
-# Sensitivity analysis for Day per day
-m_max_T_90_shield_night <- update(m_max_T_95_shield_night, formula = max_T2_90 ~ ., newdata = microclimate_shield_night)
-
-saveRDS(m_max_T_90_shield_night, file = "m_max_T_90_shield_night.rds")
-
-sink("m_max_T_90_shield_night_summary.txt")
-print(summary(m_max_T_90_shield_night))
+# Sensitivity analysis for cold extremes
+m_min_T_10_shield_night <- update(m_min_T_05_shield_night, formula = min_T2_10 ~ ., newdata = microclimate_shield_night)
+saveRDS(m_min_T_10_shield_night, file = "m_min_T_10_shield_night.rds")
+sink("m_min_T_10_shield_night_summary.txt")
+print(summary(m_min_T_10_shield_night))
 sink()
 
-m_max_T_99_shield_night <- update(m_max_T_95_shield_night, formula = max_T2_99 ~ ., newdata = microclimate_shield_night)
-
-saveRDS(m_max_T_99_shield_night, file = "m_max_T_99_shield_night.rds")
-
-sink("m_max_T_99_shield_night_summary.txt")
-print(summary(m_max_T_99_shield_night))
+m_min_T_01_shield_night <- update(m_min_T_05_shield_night, formula = min_T2_01 ~ ., newdata = microclimate_shield_night)
+saveRDS(m_min_T_01_shield_night, file = "m_min_T_01_shield_night.rds")
+sink("m_min_T_01_shield_night_summary.txt")
+print(summary(m_min_T_01_shield_night))
 sink()
 
-m_max_T_abs_shield_night <- update(m_max_T_95_shield_night, formula = max_T2 ~ ., newdata = microclimate_shield_night)
-
-saveRDS(m_max_T_abs_shield_night, file = "m_max_T_abs_shield_night.rds")
-
-sink("m_max_T_abs_shield_night_summary.txt")
-print(summary(m_max_T_abs_shield_night))
+m_min_T_abs_shield_night <- update(m_min_T_05_shield_night, formula = min_T2 ~ ., newdata = microclimate_shield_night)
+saveRDS(m_min_T_abs_shield_night, file = "m_min_T_abs_shield_night.rds")
+sink("m_min_T_abs_shield_night_summary.txt")
+print(summary(m_min_T_abs_shield_night))
 sink()
 
-posterior_night_90 <- as_draws_df(m_max_T_90_shield_night)
-posterior_night_95 <- as_draws_df(m_max_T_95_shield_night)
-posterior_night_99 <- as_draws_df(m_max_T_99_shield_night)
-posterior_night_abs <- as_draws_df(m_max_T_abs_shield_night)
+# Extract posterior draws
+posterior_night_10 <- as_draws_df(m_min_T_10_shield_night)
+posterior_night_05 <- as_draws_df(m_min_T_05_shield_night)
+posterior_night_01 <- as_draws_df(m_min_T_01_shield_night)
+posterior_night_abs <- as_draws_df(m_min_T_abs_shield_night)
 
-# Create a named list of draws for midshieldpresent from each model
+# Combine draws
 draws_list <- list(
-  "90th" = posterior_night_90$b_midshieldpresent,
-  "95th" = posterior_night_95$b_midshieldpresent,
-  "99th" = posterior_night_99$b_midshieldpresent,
-  "Abs Max" = posterior_night_abs$b_midshieldpresent
+  "10th"     = posterior_night_10$b_midshieldpresent,
+  "5th"      = posterior_night_05$b_midshieldpresent,
+  "1st"      = posterior_night_01$b_midshieldpresent,
+  "Abs Min"  = posterior_night_abs$b_midshieldpresent
 )
 
-# Convert to matrix where each column is a chain
 draws_matrix <- do.call(cbind, draws_list)
 
-# Use mcmc_areas
-comparison_plot_night = mcmc_areas(draws_matrix, prob = 0.95)
-
+# Visualize
+comparison_plot_night <- mcmc_areas(draws_matrix, prob = 0.95)
 comparison_plot_night
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "comparison_plot_night.jpg")
-
-# Save the plot as a high-resolution PNG
+# Save the comparison plot
+output_file_plot1 <- file.path(output_dir, "comparison_plot_night_cold_extremes.jpg")
 ggsave(filename = output_file_plot1, 
        plot = comparison_plot_night, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
+       width = 8, height = 6, dpi = 300)
 
 ```
 
 ```{r Analysis night per day}
 
-# --------- Night Per day ---------- # 
+# --------- Night Per Day — Cold Extremes ---------- #
 
-priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
+priors <- prior(cauchy(0, 0.5), coef = midshield_binomial)
 
-m_max_T_95_shield_date_night <- brm(
-  max_T2_95 ~ midshield_binomial * yday + (1|div),
-  prior=priors,
+# Main model with 5th percentile (cold threshold)
+m_min_T_05_shield_date_night <- brm(
+  min_T2_05 ~ midshield_binomial * yday + (1 | div),
+  prior = priors,
   data = microclimate_shield_date_night,
-  chains = 4, 
-  iter=4000,
-  warmup=1000)
-
-plot(m_max_T_95_shield_date_night)
-pp_check(m_max_T_95_shield_date_night)
-summary(m_max_T_95_shield_date_night)
-
-saveRDS(m_max_T_95_shield_date_night, file = "m_max_T_95_shield_date_night.rds")
-
-sink("m_max_T_95_shield_date_night_summary.txt")
-print(summary(m_max_T_95_shield_date_night))
-sink()
-
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "m_max_T_95_shield_date_night_pp_plot.jpg")
-
-# Generate the pp_check plot and assign it to an object
-m_max_T_95_shield_date_night_pp_plot <- pp_check(m_max_T_95_shield_date_night)
-
-# Save the plot as a high-resolution PNG
-ggsave(filename = output_file_plot1, 
-       plot = m_max_T_95_shield_date_night_pp_plot, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
-
-# Sensitivity analysis for night per night
-m_max_T_90_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2_90 ~ ., newdata = microclimate_shield_date_night)
-
-saveRDS(m_max_T_90_shield_date_night, file = "m_max_T_90_shield_date_night.rds")
-
-sink("m_max_T_90_shield_date_night_summary.txt")
-print(summary(m_max_T_90_shield_date_night))
-sink()
-
-m_max_T_99_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2_99 ~ ., newdata = microclimate_shield_date_night)
-
-saveRDS(m_max_T_99_shield_date_night, file = "m_max_T_99_shield_date_night.rds")
-
-sink("m_max_T_99_shield_date_night_summary.txt")
-print(summary(m_max_T_99_shield_date_night))
-sink()
-
-m_max_T_abs_shield_date_night <- update(m_max_T_95_shield_date_night, formula = max_T2 ~ ., newdata = microclimate_shield_date_night)
-
-saveRDS(m_max_T_abs_shield_date_night, file = "m_max_T_abs_shield_date_night.rds")
-
-sink("m_max_T_abs_shield_date_night_summary.txt")
-print(summary(m_max_T_abs_shield_date_night))
-sink()
-
-posterior_date_night_90 <- as_draws_df(m_max_T_90_shield_date_night)
-posterior_date_night_95 <- as_draws_df(m_max_T_95_shield_date_night)
-posterior_date_night_99 <- as_draws_df(m_max_T_99_shield_date_night)
-posterior_date_night_abs <- as_draws_df(m_max_T_abs_shield_date_night)
-
-# Create a named list of draws for midshieldpresent from each model
-draws_list <- list(
-  "90th" = posterior_date_night_90$b_midshield_binomial,
-  "95th" = posterior_date_night_95$b_midshield_binomial,
-  "99th" = posterior_date_night_99$b_midshield_binomial,
-  "Abs Max" = posterior_date_night_abs$b_midshield_binomial
+  chains = 4,
+  iter = 4000,
+  warmup = 1000
 )
 
-# Convert to matrix where each column is a chain
+plot(m_min_T_05_shield_date_night)
+pp_check(m_min_T_05_shield_date_night)
+summary(m_min_T_05_shield_date_night)
+
+saveRDS(m_min_T_05_shield_date_night, file = "m_min_T_05_shield_date_night.rds")
+
+sink("m_min_T_05_shield_date_night_summary.txt")
+print(summary(m_min_T_05_shield_date_night))
+sink()
+
+# Save pp_check plot
+output_file_plot1 <- file.path(output_dir, "m_min_T_05_shield_date_night_pp_plot.jpg")
+m_min_T_05_shield_date_night_pp_plot <- pp_check(m_min_T_05_shield_date_night)
+
+ggsave(filename = output_file_plot1,
+       plot = m_min_T_05_shield_date_night_pp_plot,
+       width = 8, height = 6, dpi = 300)
+
+# Sensitivity models
+m_min_T_10_shield_date_night <- update(m_min_T_05_shield_date_night,
+                                       formula = min_T2_10 ~ .,
+                                       newdata = microclimate_shield_date_night)
+saveRDS(m_min_T_10_shield_date_night, file = "m_min_T_10_shield_date_night.rds")
+sink("m_min_T_10_shield_date_night_summary.txt")
+print(summary(m_min_T_10_shield_date_night))
+sink()
+
+m_min_T_01_shield_date_night <- update(m_min_T_05_shield_date_night,
+                                       formula = min_T2_01 ~ .,
+                                       newdata = microclimate_shield_date_night)
+saveRDS(m_min_T_01_shield_date_night, file = "m_min_T_01_shield_date_night.rds")
+sink("m_min_T_01_shield_date_night_summary.txt")
+print(summary(m_min_T_01_shield_date_night))
+sink()
+
+m_min_T_abs_shield_date_night <- update(m_min_T_05_shield_date_night,
+                                        formula = min_T2 ~ .,
+                                        newdata = microclimate_shield_date_night)
+saveRDS(m_min_T_abs_shield_date_night, file = "m_min_T_abs_shield_date_night.rds")
+sink("m_min_T_abs_shield_date_night_summary.txt")
+print(summary(m_min_T_abs_shield_date_night))
+sink()
+
+# Extract posterior draws
+posterior_date_night_10 <- as_draws_df(m_min_T_10_shield_date_night)
+posterior_date_night_05 <- as_draws_df(m_min_T_05_shield_date_night)
+posterior_date_night_01 <- as_draws_df(m_min_T_01_shield_date_night)
+posterior_date_night_abs <- as_draws_df(m_min_T_abs_shield_date_night)
+
+# Create a named list of draws
+draws_list <- list(
+  "10th"    = posterior_date_night_10$b_midshield_binomial,
+  "5th"     = posterior_date_night_05$b_midshield_binomial,
+  "1st"     = posterior_date_night_01$b_midshield_binomial,
+  "Abs Min" = posterior_date_night_abs$b_midshield_binomial
+)
+
 draws_matrix <- do.call(cbind, draws_list)
 
-# Use mcmc_areas
-comparison_plot_date_night = mcmc_areas(draws_matrix, prob = 0.95)
+# Plot
+comparison_plot_date_night_cold <- mcmc_areas(draws_matrix, prob = 0.95)
+comparison_plot_date_night_cold
 
-comparison_plot_date_night
+# Save the comparison plot
+output_file_plot1 <- file.path(output_dir, "comparison_plot_date_night_cold.jpg")
 
-# Save as JPG
-# Define the full file path for the plot
-output_file_plot1 <- file.path(output_dir, "comparison_plot_date_night.jpg")
-
-# Save the plot as a high-resolution PNG
-ggsave(filename = output_file_plot1, 
-       plot = comparison_plot_date_night, 
-       width = 8,        # Width in inches
-       height = 6,       # Height in inches
-       dpi = 300) 
+ggsave(filename = output_file_plot1,
+       plot = comparison_plot_date_night_cold,
+       width = 8, height = 6, dpi = 300)
 
 ```
 
@@ -556,12 +530,12 @@ Plot_B <- ggplot(microclimate_shield_date_day, aes(x = Date, y = max_T2, color =
   scale_fill_manual(values = shield_colors)
 
 # ------- Plot C: Nighttime Violin Plot -------- # 
-Plot_C <- ggplot(microclimate_shield_night, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2_95, color = midshield, fill = midshield)) +
+Plot_C <- ggplot(microclimate_shield_night, aes(x = factor(midshield, levels = c('present', 'absent')), y = min_T2_05, color = midshield, fill = midshield)) +
   geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
   geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) +
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16, position = position_dodge(width = 0.7)) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.3, position = position_dodge(width = 0.7)) +
-  labs(x = "Shield configuration", y = "Max temp (°C) at 1 cm (21:00 - 06:00)") +
+  labs(x = "Shield configuration", y = "Min temp (°C) at 1 cm (21:00 - 06:00)") +
   theme_minimal() +
   theme(
     axis.text.x = element_text(family = "Arial", size = 16),
@@ -574,11 +548,11 @@ Plot_C <- ggplot(microclimate_shield_night, aes(x = factor(midshield, levels = c
   scale_fill_manual(values = shield_colors)
 
 # ------- Plot D: Nighttime Time Series -------- # 
-Plot_D <- ggplot(microclimate_shield_date_night, aes(x = Date, y = max_T2, color = midshield, fill = midshield)) +
+Plot_D <- ggplot(microclimate_shield_date_night, aes(x = Date, y = min_T2_05, color = midshield, fill = midshield)) +
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.3) +
   stat_summary(fun = mean, geom = "line", size = 1, alpha = 0.7, aes(group = midshield)) +
-  labs(x = "Date", y = "Max daily temp (°C) at 1 cm (21:00 - 06:00)") +
+  labs(x = "Date", y = "Min daily temp (°C) at 1 cm (21:00 - 06:00)") +
   theme_minimal() +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1, family = "Arial", size = 16),
@@ -596,6 +570,8 @@ Plot_D <- ggplot(microclimate_shield_date_night, aes(x = Date, y = max_T2, color
 combined_plot <- (Plot_A + Plot_B) / (Plot_C + Plot_D) +
   theme(plot.tag = element_text(size = 20, face = "bold"),
         plot.tag.position = c(0, 1.1))  # More space between tag and plot
+
+combined_plot
 
 # Save to file
 output_dir <- file.path(data_path, "Figures/")
