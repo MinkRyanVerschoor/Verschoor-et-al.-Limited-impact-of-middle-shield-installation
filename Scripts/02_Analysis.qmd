@@ -399,6 +399,7 @@ ggsave(filename = output_file_plot1,
 m_min_T_10_shield_date_night <- update(m_min_T_05_shield_date_night,
                                        formula = min_T2_10 ~ .,
                                        newdata = microclimate_shield_date_night)
+
 saveRDS(m_min_T_10_shield_date_night, file = "m_min_T_10_shield_date_night.rds")
 sink("m_min_T_10_shield_date_night_summary.txt")
 print(summary(m_min_T_10_shield_date_night))
