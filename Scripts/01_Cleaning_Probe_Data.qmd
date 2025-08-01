@@ -100,7 +100,27 @@ microclimate_shield <- data.table::rbindlist(tms.sm.list)
 
 ```
 
+```{r Saving the bound data}
+
+#Saving the cleaned data
+
+# Define the output directory
+output_dir <- file.path(data_path, "Data/Raw")
+
+# Define the full file path for the CSV
+output_file_1 <- file.path(output_dir, "Bioclive_microclimate_shield_2024.csv")
+
+# Save the filtered data to a CSV file using fwrite
+data.table::fwrite(microclimate_shield, file = output_file_1)
+
+# Confirmation message
+cat("Data saved to:", output_file_1, "\n")
+
+```
+
 ```{r Cleaning up the probe data}
+
+microclimate_shield = load_data("Bioclive_microclimate_shield_2024.csv")
 
 # Cleaning up the probe data
 # Lowercase plots and format the probe code
