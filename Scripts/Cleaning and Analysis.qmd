@@ -32,6 +32,7 @@ if (!dir.exists(data_path)) dir.create(data_path, recursive = TRUE)
 
 #General
 
+library(marginaleffects)
 library(data.table)
 library(fasttime)
 library(lubridate)
@@ -39,6 +40,7 @@ library(tidyverse)
 library(MetBrewer)
 library(ggh4x)
 library(ggsignif)
+library(ggdist)
 library(patchwork)
 library(brms)
 library(emmeans)
@@ -471,7 +473,8 @@ m_max_T_95_shield_day = brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatm
   prior=priors,
   chains = 4, 
   iter=4000,
-  warmup=1000)
+  warmup=1000,
+  control = list(adapt_delta = 0.95))
 
 plot(m_max_T_95_shield_day)
 pp_check(m_max_T_95_shield_day)
@@ -560,23 +563,22 @@ ggsave(filename = output_file_plot1,
 
 # ----------- Day Per day ----------# 
 
-microclimate_shield_date_day$radiation <- scale(microclimate_shield_date_day$radiation)
+microclimate_shield_date_day$rad_scaled <- scale(microclimate_shield_date_day$radiation)
+microclimate_shield_date_day$wind_scaled <- scale(microclimate_shield_date_day$max_windspeed)
 
-priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
-
-m_max_T_95_shield_date_day <- brm(
-  max_T2_95 ~ midshield_binomial * radiation + (1|div) + (1|treatment) + (1|dist_wall) + (1 | Date),
-  prior=priors,
+m_day_complete <- brm(
+  max_T2_95 ~ midshield_binomial * rad_scaled + 
+              midshield_binomial * wind_scaled + 
+              (1 | div) + (1 | treatment) + (1 | dist_wall) + (1 | Date),
   data = microclimate_shield_date_day,
-  cores = 4,
-  chains = 4, 
-  iter=4000,
-  warmup=1000
+  prior = priors, 
+  chains = 4, iter = 2000, warmup = 1000, cores = 4,
+  control = list(adapt_delta = 0.95)
 )
 
 plot(m_max_T_95_shield_date_day)
 pp_check(m_max_T_95_shield_date_day)
-summary(m_max_T_95_shield_date_day)
+summary(m_day_complete)
 
 saveRDS(m_max_T_95_shield_date_day, file = "m_max_T_95_shield_date_day.rds")
 
@@ -658,12 +660,14 @@ ggsave(filename = output_file_plot1,
 ```{r Analysis night month}
 
 #--------- Night ----------# 
+
 # Base model using the 5th percentile
-m_min_T_05_shield_night = brm(min_T2_05 ~ midshield + (1|div), 
-                              data = microclimate_shield_night,   
-                              chains = 4, 
-                              iter = 4000,
-                              warmup = 1000)
+m_min_T_05_shield_night = brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), data = microclimate_shield_total_night,   
+  prior=priors,
+  chains = 4, 
+  iter=4000,
+  warmup=1000,
+  control = list(adapt_delta = 0.95))
 
 plot(m_min_T_05_shield_night)
 pp_check(m_min_T_05_shield_night)
@@ -734,16 +738,17 @@ ggsave(filename = output_file_plot1,
 
 # --------- Night Per Day — Cold Extremes ---------- #
 
-priors <- prior(cauchy(0, 0.5), coef = midshield_binomial)
+microclimate_shield_date_night$rad_scaled <- scale(microclimate_shield_date_night$radiation)
+microclimate_shield_date_night$wind_scaled <- scale(microclimate_shield_date_night$max_windspeed)
 
 # Main model with 5th percentile (cold threshold)
 m_min_T_05_shield_date_night <- brm(
-  min_T2_05 ~ midshield_binomial * yday + (1 | div),
-  prior = priors,
+  min_T2_05 ~ midshield_binomial * wind_scaled + 
+              (1 | div) + (1 | treatment) + (1 | dist_wall) + (1 | Date),
   data = microclimate_shield_date_night,
-  chains = 4,
-  iter = 4000,
-  warmup = 1000
+  prior = priors, 
+  chains = 4, iter = 2000, warmup = 1000, cores = 4,
+  control = list(adapt_delta = 0.95)
 )
 
 plot(m_min_T_05_shield_date_night)
@@ -856,13 +861,33 @@ ggsave(filename = output_file_plot1,
 
 ```
 
-
 ## Plots
 
 ```{r Plots}
 
 
 # ------- Plot A: Daytime Violin Plot (no x-title) -------- # 
+
+Plot_A_refined <- ggplot(microclimate_shield_total_day, aes(x = factor(midshield), y = max_T2_95, fill = midshield)) +
+  # Use a half-violin (raincloud plot) to make it less crowded
+  ggdist::stat_halfeye(adjust = .5, width = .3, .width = 0, justification = -.3, point_colour = NA) + 
+  geom_boxplot(width = .1, outlier.shape = NA, alpha = 0.5) +
+  # Add a horizontal line at the Intercept from your Bayesian model
+  geom_hline(yintercept = 29.35, linetype = "dashed", alpha = 0.5) + 
+  labs(subtitle = "A: Daytime (11:00 - 17:00)", y = "Max temp (°C)") +
+   theme_minimal() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
+    legend.position = "none"
+  ) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors)
+
+Plot_A_refined
+
 Plot_A <- ggplot(microclimate_shield_day, aes(x = factor(midshield, levels = c('present', 'absent')), y = max_T2_95, color = midshield, fill = midshield)) +
   geom_violin(position = position_dodge(width = 0.7), alpha = 0.3, width = 0.6) +
   geom_dotplot(binaxis = "y", stackdir = "center", dotsize = 0.5, position = position_dodge(width = 0.7), alpha = 0.3) +
