@@ -19,7 +19,8 @@ rm(list = ls())
 # restore the library
 renv::restore()
 
-data_path <- "data/figures"
+# Create directory for saving figures and results if it doesn't exist
+data_path <- "data/figures/revisions"
 if (!dir.exists(data_path)) dir.create(data_path, recursive = TRUE)
 ```
 
@@ -58,14 +59,17 @@ NOT NEEDED IF ALREADY MADE, CONINUE TO CHUNK BELOW (SAVES LOT OF TIME)
 ```{r Loading in Data Zenodo}
 
 # These files are hosted on Zenodo at DOI: 10.5281/zenodo.16677435
+options(timeout = 600) # Increase timeout to 10 minutes
 
 # Define URLs to files on Zenodo
 microclimate_url <- "https://zenodo.org/record/16677435/files/Bioclive_microclimate_shield_2024.csv?download=1"
 design_url <- "https://zenodo.org/record/16677435/files/bioclive_design.csv?download=1"
+weather_url <- "https://zenodo.org/records/18482920/files/TheBilt%20Weather%20station%20data%20KNMI.txt?download=1"
 
 # Define local filenames
 microclimate_file <- "data/Bioclive_microclimate_shield_2024.csv"
 design_file <- "data/bioclive_design.csv"
+weather_file <- "data/TheBilt Weather station data KNMI.txt"
 
 # Create data directory if it doesn't exist
 if (!dir.exists("data")) dir.create("data")
@@ -86,10 +90,18 @@ if (!file.exists(design_file)) {
   message("Design file already exists locally.")
 }
 
+# Download weather data if needed
+if (!file.exists(weather_file)) {
+  message("Downloading weather file...")
+  download.file(weather_url, destfile = weather_file, mode = "wb")
+} else {
+  message("Weather file already exists locally.")
+}
+
 # Now load the data
 microclimate_shield <- readr::read_csv(microclimate_file)
 bioclive_design <- readr::read_csv(design_file)
-
+weather_data <- readr::read_csv(weather_file)
 
 ```
 
@@ -161,6 +173,44 @@ microclimate_shield[, midshield := ifelse(
 
 ```
 
+```{r Weather station data}
+## The bilt weather station data
+
+# Loading the bilt weather station data 
+weather_data <- weather_data %>%
+  # Select only the variables you need
+  # TX: Max Temp, TG: Mean Temp, FHX: Max Wind, Q: Radiation, SQ: Sunshine
+  select(YYYYMMDD, TX, TG, FHX, Q, SQ) %>%
+  rename(
+    Date = YYYYMMDD,
+    max_temp = TX,             # Maximum temperature (in 0.1 °C)
+    mean_temp = TG,            # Mean temperature (in 0.1 °C)
+    max_windspeed = FHX,       # Highest hourly average windspeed (in 0.1 m/s)
+    radiation = Q,             # Global radiation (in J/cm2)
+    sunshine_min = SQ          # Sunshine duration (in 0.1 hours)
+  ) %>%
+  mutate(
+    # 1. Convert Date string to Date object
+    Date = as.Date(as.character(Date), format = "%Y%m%d"),
+    
+    # 2. Convert Temperatures from 0.1 °C to °C
+    max_temp = max_temp * 0.1,
+    mean_temp = mean_temp * 0.1,
+    
+    # 3. Convert Max Windspeed from 0.1 m/s to m/s
+    max_windspeed = max_windspeed * 0.1,
+    
+    # 4. Convert Sunshine from 0.1 hours to Minutes
+    # Formula: (Raw Value * 0.1) * 60  => Raw Value * 6
+    sunshine_min = sunshine_min * 6,
+    
+    # 5. Radiation (Q) remains in J/cm2
+    radiation = radiation 
+  )%>%
+  filter(Date >= as.Date("2024-08-05") & Date <= as.Date("2024-09-04"))
+
+```
+
 ## Processing Microclimate data and calculating the SWC
 
 Purpose of chunk: Format Logger data and calibrate TMS raw moisture signal to volumetric Soil Water content (SWC, %).
@@ -175,37 +225,33 @@ microclimate_shield <- microclimate_shield  |>
  + Moisture * 0.0002496218 + -0.1578888
 ), 4))
 
-
-# Removing the night hours (21:00 - 06:00) from the data & removing decrepit measurements 
-microclimate_shield_day <- microclimate_shield[
-  Time >= "06:00" & Time <= "21:00" & 
-  !(subplot %in% c("63B", "58A")) &
-  (SWC >= 0.01 | is.na(SWC)) &
-  (T1 <= 45 | is.na(T1)) &
-  (T2 <= 45 | is.na(T2)) &
-  (T3 <= 45 | is.na(T3)) &
-  (T1 >= -20 | is.na(T1)) &
-  (T2 >= -20 | is.na(T2)) &
-  (T3 >= -20 | is.na(T3))
-]
-
 microclimate_shield$Time <- as.POSIXct(microclimate_shield$Time, format="%H:%M:%S")
 
-# Assuming `Time` is a POSIXct or POSIXlt object, or it's in an easy-to-parse format
-microclimate_shield_night <- microclimate_shield[
-  (format(Time, "%H:%M:%S") >= "21:00:00" | format(Time, "%H:%M:%S") <= "06:00:00") & 
+# Filtering for Peak Day (6 hours) + Quality Control
+microclimate_shield_day <- microclimate_shield[
+  format(Time, "%H:%M:%S") >= "11:00:00" & 
+  format(Time, "%H:%M:%S") <= "17:00:00" & 
   !(subplot %in% c("63B", "58A")) &
-  (SWC >= 0.01 | is.na(SWC)) &
-  (T1 <= 45 | is.na(T1)) &
-  (T2 <= 45 | is.na(T2)) &
-  (T3 <= 45 | is.na(T3)) &
-  (T1 >= -20 | is.na(T1)) &
-  (T2 >= -20 | is.na(T2)) &
-  (T3 >= -20 | is.na(T3))
+  (SWC > 0 | is.na(SWC)) &
+  # Temperature bounds (using 60 as per your last snippet)
+  (T1 <= 60 & T1 >= -20 | is.na(T1)) &
+  (T2 <= 60 & T2 >= -20 | is.na(T2)) &
+  (T3 <= 60 & T3 >= -20 | is.na(T3))
+]
+
+# Filtering for Deep Night (23:00 - 05:00)
+# Filtering for Deep Night (6 hours) + Quality Control
+# Filtering for Deep Night (23:00 - 05:00)
+microclimate_shield_night <- microclimate_shield[
+  (format(Time, "%H:%M:%S") >= "23:00:00" | format(Time, "%H:%M:%S") <= "05:00:00") & 
+  !(subplot %in% c("63B", "58A")) &
+  (SWC > 0 | is.na(SWC)) &
+  (T1 <= 60 & T1 >= -20 | is.na(T1)) &
+  (T2 <= 60 & T2 >= -20 | is.na(T2)) &
+  (T3 <= 60 & T3 >= -20 | is.na(T3))
 ]
 
 ```
-
 
 ```{r Creating the mean and max dataframe}
 
@@ -360,6 +406,15 @@ microclimate_shield_date_night <- microclimate_shield_date_night %>%
   ) |> 
   left_join(bioclive_design)
 
+# merging with weather data
+
+microclimate_shield_date_day <- microclimate_shield_date_day |> 
+  left_join(weather_data, by="Date")
+
+microclimate_shield_date_night <- microclimate_shield_date_night |>
+  left_join(weather_data, by="Date")
+
+
 
 ```
 
@@ -378,6 +433,10 @@ microclimate_shield_date_night$yday = as.numeric(microclimate_shield_date_night$
 microclimate_shield_date_day$midshield_binomial<-as.integer(if_else(microclimate_shield_date_day$midshield=="present", 1, 0))
 
 microclimate_shield_date_night$midshield_binomial<-as.integer(if_else(microclimate_shield_date_night$midshield=="present", 1, 0))
+
+microclimate_shield_total_day$midshield_binomial<-as.integer(if_else(microclimate_shield_total_day$midshield=="present", 1, 0))
+
+microclimate_shield_total_night$midshield_binomial<-as.integer(if_else(microclimate_shield_total_night$midshield=="present", 1, 0))
 ```
 
 ## Setting up the color palette
@@ -404,8 +463,13 @@ loadfonts(device = "all")    # Loads the fonts
 
 #--------- Day ----------# 
 
+# Define a weakly informative prior for all fixed effects
+priors <- prior(cauchy(0, 0.5), class = "b")
+
 #For the total
-m_max_T_95_shield_day = brm(max_T2_95 ~ midshield + (1|div), data = microclimate_shield_day,   chains = 4, 
+m_max_T_95_shield_day = brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), data = microclimate_shield_total_day,   
+  prior=priors,
+  chains = 4, 
   iter=4000,
   warmup=1000)
 
@@ -496,15 +560,19 @@ ggsave(filename = output_file_plot1,
 
 # ----------- Day Per day ----------# 
 
+microclimate_shield_date_day$radiation <- scale(microclimate_shield_date_day$radiation)
+
 priors<-prior(cauchy(0,0.5), coef=midshield_binomial)
 
 m_max_T_95_shield_date_day <- brm(
-  max_T2_95 ~ midshield_binomial * yday + (1|div),
+  max_T2_95 ~ midshield_binomial * radiation + (1|div) + (1|treatment) + (1|dist_wall) + (1 | Date),
   prior=priors,
   data = microclimate_shield_date_day,
+  cores = 4,
   chains = 4, 
   iter=4000,
-  warmup=1000)
+  warmup=1000
+)
 
 plot(m_max_T_95_shield_date_day)
 pp_check(m_max_T_95_shield_date_day)
