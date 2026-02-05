@@ -11,29 +11,20 @@ editor_options:
 
 Notes: ALWAYS TRY TO RUN BEFORE CODING SO THAT PACKAGES ARE THE RIGHT VERSION AND SYNCHED WITH THE RENV ENVIRONMENT
 
+## Loading and installing packages
+
 ```{r renv environment}
 
 # clear everything in the R environment
-rm(list = ls())
+rm(list = ls()) # Optional: some prefer a clean slate, others find it risky
+renv::restore() # restore the library
+#renv::snapshot() # snapshot the library to update renv.lock if needed
 
-# restore the library
-renv::restore()
 
-# Create directory for saving figures and results if it doesn't exist
-data_path <- "data/figures/revisions"
-if (!dir.exists(data_path)) dir.create(data_path, recursive = TRUE)
-```
-
-## Loading and installing packages
-
-```{r packages}
-
-# Loading and installing the required Packages
-
-#General
-
+## --- Load Packages ---
 library(marginaleffects)
 library(data.table)
+library(here)
 library(fasttime)
 library(lubridate)
 library(tidyverse)
@@ -48,6 +39,22 @@ library(extrafont)
 library(bayesplot)
 library(posterior)
 
+## --- Directory Setup ---
+# Use here() so this works regardless of where the script is launched
+fig_path <- here("data", "figures", "revisions")
+if (!dir.exists(fig_path)) dir.create(fig_path, recursive = TRUE) # Create directory for saving figures and results if it doesn't exist
+
+## --- CmdStan Logic ---
+stan_dir <- here("cmdstan")
+
+# ONLY install if the folder is empty or missing
+if (!dir.exists(stan_dir) || length(list.files(stan_dir)) == 0) {
+  dir.create(stan_dir, showWarnings = FALSE)
+  install_cmdstan(dir = stan_dir)
+}
+
+# Always tell R to look in that local project folder
+set_cmdstan_path(stan_dir)
 ```
 
 ## Loading in Microclimate data
