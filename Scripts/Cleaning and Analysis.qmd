@@ -20,7 +20,6 @@ rm(list = ls()) # Optional: some prefer a clean slate, others find it risky
 renv::restore() # restore the library
 #renv::snapshot() # snapshot the library to update renv.lock if needed
 
-
 ## --- Load Packages ---
 library(marginaleffects)
 library(data.table)
@@ -38,24 +37,13 @@ library(emmeans)
 library(extrafont)
 library(bayesplot)
 library(posterior)
-library(cmdstanr)
 
 ## --- Directory Setup ---
 # Use here() so this works regardless of where the script is launched
 fig_path <- here("data", "figures", "revisions")
 if (!dir.exists(fig_path)) dir.create(fig_path, recursive = TRUE) # Create directory for saving figures and results if it doesn't exist
 
-## --- CmdStan Logic ---
-# 1. Define the path
-stan_path <- "C:/cmdstan/cmdstan-2.38.0"
 
-# 2. Check if it exists before setting it
-if (dir.exists(stan_path)) {
-  set_cmdstan_path(stan_path)
-  message("CmdStan successfully connected!")
-} else {
-  warning("CmdStan not found at ", stan_path, ". Models will fall back to rstan.")
-}
 ```
 
 ## Loading in Microclimate data
@@ -481,13 +469,10 @@ m_max_T_95_shield_day = brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatm
   prior=priors,
   control = list(adapt_delta = 0.95), 
   # --- THE SPEED SETTINGS ---
-  backend = "cmdstanr",
-  cores = 4,              # Use your 4 physical cores
-  threads = threading(2), # Use 2 threads per chain (Within-chain parallelization)
-  chains = 4,
+  cores = 20,              # Use your 4 physical cores
+  chains = 20,
   iter = 4000,
-  warmup = 1000,
-  refresh = 50            # Update the console every 50 iterations so you can watch progress
+  warmup = 1000
 )
 
 plot(m_max_T_95_shield_day)
