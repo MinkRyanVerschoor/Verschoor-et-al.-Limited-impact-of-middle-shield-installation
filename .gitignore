@@ -2,3 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
+# Stan binaries and local installs
+cmdstan/
+# Model outputs (usually too big for Git)
+*.rds
+*.RData
