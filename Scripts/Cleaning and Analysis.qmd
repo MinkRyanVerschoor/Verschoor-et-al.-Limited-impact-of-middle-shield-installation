@@ -38,6 +38,7 @@ library(emmeans)
 library(extrafont)
 library(bayesplot)
 library(posterior)
+library(cmdstanr)
 
 ## --- Directory Setup ---
 # Use here() so this works regardless of where the script is launched
@@ -45,16 +46,16 @@ fig_path <- here("data", "figures", "revisions")
 if (!dir.exists(fig_path)) dir.create(fig_path, recursive = TRUE) # Create directory for saving figures and results if it doesn't exist
 
 ## --- CmdStan Logic ---
-stan_dir <- here("cmdstan")
+# 1. Define the path
+stan_path <- "C:/cmdstan/cmdstan-2.38.0"
 
-# ONLY install if the folder is empty or missing
-if (!dir.exists(stan_dir) || length(list.files(stan_dir)) == 0) {
-  dir.create(stan_dir, showWarnings = FALSE)
-  install_cmdstan(dir = stan_dir)
+# 2. Check if it exists before setting it
+if (dir.exists(stan_path)) {
+  set_cmdstan_path(stan_path)
+  message("CmdStan successfully connected!")
+} else {
+  warning("CmdStan not found at ", stan_path, ". Models will fall back to rstan.")
 }
-
-# Always tell R to look in that local project folder
-set_cmdstan_path(stan_dir)
 ```
 
 ## Loading in Microclimate data
@@ -478,10 +479,16 @@ priors <- prior(cauchy(0, 0.5), class = "b")
 #For the total
 m_max_T_95_shield_day = brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), data = microclimate_shield_total_day,   
   prior=priors,
-  chains = 4, 
-  iter=4000,
-  warmup=1000,
-  control = list(adapt_delta = 0.95))
+  control = list(adapt_delta = 0.95), 
+  # --- THE SPEED SETTINGS ---
+  backend = "cmdstanr",
+  cores = 4,              # Use your 4 physical cores
+  threads = threading(2), # Use 2 threads per chain (Within-chain parallelization)
+  chains = 4,
+  iter = 4000,
+  warmup = 1000,
+  refresh = 50            # Update the console every 50 iterations so you can watch progress
+)
 
 plot(m_max_T_95_shield_day)
 pp_check(m_max_T_95_shield_day)
@@ -579,8 +586,15 @@ m_day_complete <- brm(
               (1 | div) + (1 | treatment) + (1 | dist_wall) + (1 | Date),
   data = microclimate_shield_date_day,
   prior = priors, 
-  chains = 4, iter = 2000, warmup = 1000, cores = 4,
-  control = list(adapt_delta = 0.95)
+  control = list(adapt_delta = 0.95), 
+  # --- THE SPEED SETTINGS ---
+  backend = "cmdstanr",
+  cores = 4,              # Use your 4 physical cores
+  threads = threading(2), # Use 2 threads per chain (Within-chain parallelization)
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  refresh = 50            # Update the console every 50 iterations so you can watch progress
 )
 
 plot(m_max_T_95_shield_date_day)
@@ -671,10 +685,16 @@ ggsave(filename = output_file_plot1,
 # Base model using the 5th percentile
 m_min_T_05_shield_night = brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), data = microclimate_shield_total_night,   
   prior=priors,
-  chains = 4, 
-  iter=4000,
-  warmup=1000,
-  control = list(adapt_delta = 0.95))
+  control = list(adapt_delta = 0.95), 
+  # --- THE SPEED SETTINGS ---
+  backend = "cmdstanr",
+  cores = 4,              # Use your 4 physical cores
+  threads = threading(2), # Use 2 threads per chain (Within-chain parallelization)
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  refresh = 50            # Update the console every 50 iterations so you can watch progress
+)
 
 plot(m_min_T_05_shield_night)
 pp_check(m_min_T_05_shield_night)
@@ -754,8 +774,15 @@ m_min_T_05_shield_date_night <- brm(
               (1 | div) + (1 | treatment) + (1 | dist_wall) + (1 | Date),
   data = microclimate_shield_date_night,
   prior = priors, 
-  chains = 4, iter = 2000, warmup = 1000, cores = 4,
-  control = list(adapt_delta = 0.95)
+  control = list(adapt_delta = 0.95), 
+  # --- THE SPEED SETTINGS ---
+  backend = "cmdstanr",
+  cores = 4,              # Use your 4 physical cores
+  threads = threading(2), # Use 2 threads per chain (Within-chain parallelization)
+  chains = 4,
+  iter = 2000,
+  warmup = 1000,
+  refresh = 50            # Update the console every 50 iterations so you can watch progress
 )
 
 plot(m_min_T_05_shield_date_night)
