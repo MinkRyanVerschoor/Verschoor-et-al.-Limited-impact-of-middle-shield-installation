@@ -542,32 +542,40 @@ priors <- prior(cauchy(0, 0.5), class = "b")
 ```{r Analysis}
 
 # --------- SECTION 1: DAY TOTAL ----------#
-m_max_T_95_shield_day <- brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
+m_day_95 <- brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
                              data = microclimate_shield_total_day, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
 
 day_total_results <- process_model_group(
-  base_model   = m_max_T_95_shield_day,
+  base_model   = m_day_95,
   target_vars  = c("max_T2_90", "max_T2_99", "max_T2"),
   data         = microclimate_shield_total_day,
   label        = "day_total",
-  group_name   = "Daytime Max Temp"
+  group_name   = "Daytime Max Temp", 
+  # --- ADD THESE SPEED ARGUMENTS ---
+  cores = 4,           # Use 4 cores at once
+  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
-summary(m_max_T_95_shield_day)
+summary(m_day_95)
 
 # --------- SECTION 2: NIGHT TOTAL ----------#
-m_min_T_05_shield_night <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
+m_night_05 <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
                                data = microclimate_shield_total_night, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
 
 night_total_results <- process_model_group(
-  base_model   = m_min_T_05_shield_night,
+  base_model   = m_night_05,
   target_vars  = c("min_T2_10", "min_T2_01", "min_T2"),
   data         = microclimate_shield_total_night,
   label        = "night_total",
-  group_name   = "Nighttime Min Temp"
+  group_name   = "Nighttime Min Temp", 
+  # --- ADD THESE SPEED ARGUMENTS ---
+  cores = 4,           # Use 4 cores at once
+  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
-summary(m_min_T_05_shield_night)
+summary(m_min_T_night)
 
 # --------- SECTION 3: DAY DAILY (Interactions) ----------#
 
@@ -582,7 +590,11 @@ day_date_results <- process_model_group(
   target_vars  = c("max_T2_90", "max_T2_99", "max_T2"),
   data         = microclimate_shield_date_day,
   label        = "day_date",
-  group_name   = "Daily Day (Interactions)"
+  group_name   = "Daily Day (Interactions)", 
+  # --- ADD THESE SPEED ARGUMENTS ---
+  cores = 4,           # Use 4 cores at once
+  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
 summary(m_day_date_95)
@@ -600,14 +612,18 @@ night_date_results <- process_model_group(
   target_vars  = c("min_T2_10", "min_T2_01", "min_T2"),
   data         = microclimate_shield_date_night,
   label        = "night_date",
-  group_name   = "Daily Night (Interactions)"
+  group_name   = "Daily Night (Interactions)", 
+  # --- ADD THESE SPEED ARGUMENTS ---
+  cores = 4,           # Use 4 cores at once
+  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
 summary(m_night_date_05)
 
 #--------- Distance wall - Spatial Heterogeneity ----------# 
 
-m_max_T_shield_dist = brm(max_T2_95 ~ dist_wall + (1|div), data = microclimate_shield_day, cores = 4, chains = 4, iter = 4000, warmup = 1000)
+m_dist = brm(max_T2_95 ~ dist_wall + (1|div), data = microclimate_shield_day, cores = 4, chains = 4, iter = 4000, warmup = 1000)
 
 # Path for the PP-plot
 spatial_pp_path <- file.path(data_path, "pp_check_spatial_dist.png")
@@ -621,33 +637,88 @@ summary(m_max_T_shield_dist)
 
 
 # Save the models as .rds files
-saveRDS(m_max_T_95_shield_day, "m_max_T_day.rds")
-saveRDS(m_min_T_05_shield_night, "m_min_T_night.rds")
+saveRDS(m_day_95, "m_day_95.rds")
+saveRDS(m_night_05, "m_night_05.rds")
 saveRDS(m_day_date_95, "m_day_date_95.rds")
 saveRDS(m_night_date_05, "m_night_date_05.rds")
 
-# Load them back into your environment
-m_day_date_95 <- readRDS("m_day_date_95.rds")
-m_night_date_05 <- readRDS("m_night_date_05.rds")
-
-# Now you can immediately run summary() or make plots
-summary(m_day_date_95)
 
 ```
 
 ## Supplementary info
 
+```{r PP_Check plots & Comparison plots}
+
+# Helper function to generate and save a labeled pp_check
+save_labeled_pp <- function(model, title, filename) {
+  p <- pp_check(model, ndraws = 100) + 
+    labs(
+      title = paste("PP-Check:", title),
+      subtitle = "Observed (y) vs. Simulated (y_rep)",
+      x = "Temperature (°C)", 
+      y = "Probability Density"
+    ) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
+  
+  ggsave(here("data", "figures", filename), p, width = 6, height = 4, dpi = 300)
+}
+
+# USE THIS VERSION to compare 90th, 95th, 99th on one plot
+save_robustness_comp <- function(model_group_results, title, filename) {
+  p <- ggplot(model_group_results, aes(x = estimate, y = term, color = model_label)) +
+    geom_vline(xintercept = 0, color = "black", linetype = "dashed", alpha = 0.5) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), 
+                   height = 0.3, 
+                   position = position_dodge(width = 0.5)) +
+    geom_point(position = position_dodge(width = 0.5), size = 2) +
+    labs(
+      title = paste("Sensitivity Analysis:", title),
+      subtitle = "Comparing Thresholds (e.g., 90th, 95th, 99th)",
+      x = "Effect Size (Temperature Difference °C)",
+      y = "Parameter",
+      color = "Threshold"
+    ) +
+    theme_bw() +
+    scale_color_brewer(palette = "Set1") + 
+    theme(legend.position = "bottom", axis.title = element_text(face = "bold"))
+
+  ggsave(here("data", "figures", filename), p, width = 8, height = 6, dpi = 300)
+}
+
+
+# --- Execute Plot Generation ---
+
+# Section 1: Day Total
+save_labeled_pp(m_max_T_day, "Daytime Max", "pp_check_day_total.png")
+save_robustness_comp(day_total_results, "Daytime Max Totals", "comparison_day_total.png")
+
+# Section 2: Night Total
+save_labeled_pp(m_min_T_night, "Nighttime Min", "pp_check_night_total.png")
+save_robustness_comp(night_total_results, "Nighttime Min Totals", "comparison_night_total.png")
+
+# Section 3: Day Daily
+save_labeled_pp(m_day_date_95, "Daily Day", "pp_check_day_date.png")
+save_robustness_comp(day_date_results, "Daily Day Interactions", "comparison_day_date.png")
+
+# Section 4: Night Daily
+save_labeled_pp(m_night_date_05, "Daily Night", "pp_check_night_date.png")
+save_robustness_comp(night_date_results, "Daily Night Interactions", "comparison_night_date.png")
+
+```
+
 ```{r Supplementary info}
+
 # --- Build the master list for the Word Doc ---
 full_supplement_list <- list(
   "Daytime Maximum Temperature" = list(
-    main = m_max_T_95_shield_day,
+    main = m_max_T_day,
     sensitivity = day_total_results,
     pp_path = here("data", "figures", "pp_check_day_total.png"),
     comp_path = here("data", "figures", "comparison_day_total.png")
   ),
   "Nighttime Minimum Temperature" = list(
-    main = m_min_T_05_shield_night,
+    main = m_min_T_night,
     sensitivity = night_total_results,
     pp_path = here("data", "figures", "pp_check_night_total.png"),
     comp_path = here("data", "figures", "comparison_night_total.png")
@@ -663,75 +734,33 @@ full_supplement_list <- list(
     sensitivity = night_date_results,
     pp_path = here("data", "figures", "pp_check_night_date.png"),
     comp_path = here("data", "figures", "comparison_night_date.png")
-  ), 
-  "Spatial Heterogeneity Analysis (Distance to Wall)" = list(
-    main = m_max_T_shield_dist,
-    sensitivity = NULL,    # No sensitivity checks for this model
-    pp_path = spatial_pp_path,
-    comp_path = NULL       # No comparison plot for this model
-  ))
+  )
+)
 
-
-# ----- Bayesian Fixed Effects Table -----
-make_bayesian_table <- function(model, title, subtitle = "Main Model (95%)") {
-  
-  # Extract posterior summaries using broom.mixed
-  tab <- broom.mixed::tidy(model, effects = "fixed", conf.int = TRUE, conf.level = 0.95) %>%
-    dplyr::mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
-    dplyr::select(term, estimate, std.error, conf.low, conf.high) %>%
-    dplyr::rename(
-      Parameter = term,
-      `Posterior Mean` = estimate,
-      `Est. Error` = std.error,
-      `95% Lower CI` = conf.low,
-      `95% Upper CI` = conf.high
-    )
-
-  # Create the flextable
-  ft <- flextable::flextable(tab) %>%
-    flextable::theme_vanilla() %>%
-    flextable::set_caption(caption = paste(title, "-", subtitle)) %>%
-    flextable::autofit() %>%
-    # Highlight the 'midshield' row to make it stand out for reviewers
-    flextable::highlight(i = ~ grepl("midshield", Parameter), color = "gray95")
-  
-  return(ft)
-}
-
-# --- Generate the Document ---
+# --- Generate the Document (Updated Loop) ---
 doc <- read_docx()
 
 iwalk(full_supplement_list, function(content, title) {
   
-  # A. Section Header & Main Table
   doc <<- doc %>%
     body_add_par(title, style = "heading 1") %>%
     body_add_par("Main Bayesian Model Summary", style = "heading 2") %>%
     body_add_flextable(make_bayesian_table(content$main, title))
   
-  # B. PP-Check Figure
+  # PP-Check Figure with Detailed Axis Explanation for Reviewer
   if(!is.null(content$pp_path) && file.exists(content$pp_path)) {
     doc <<- doc %>% 
       body_add_par("Posterior Predictive Check", style = "heading 2") %>%
       body_add_img(src = content$pp_path, width = 6, height = 4) %>%
-      body_add_par("Figure Note: The y-axis represents the probability density of the temperature values. The dark line (y) shows the distribution of the actual observed measurements, while the light lines (y_rep) represent 50 simulated datasets generated by the model. Overlap indicates a good model fit.", style = "Image Caption")
+      body_add_par("Figure Note: The x-axis represents recorded temperature in degrees Celsius (°C). The y-axis represents Probability Density, reflecting the relative frequency of temperature values. The dark line (y) is the observed experimental data; light blue lines (y_rep) are model simulations.", style = "Image Caption")
   }
 
-  # C. Sensitivity Tables (Only if they exist)
-  if(!is.null(content$sensitivity) && length(content$sensitivity) > 0) {
-    doc <<- doc %>% body_add_par("Sensitivity Analyses", style = "heading 2")
-    iwalk(content$sensitivity, function(mod, label) {
-        doc <<- doc %>% 
-          body_add_par(paste("Threshold:", label), style = "heading 3") %>%
-          body_add_flextable(make_bayesian_table(mod, title, label))
-    })
-  }
-
-  # D. Comparison Plot (Only if it exists)
+  # Comparison Plot (Annotated Forest Plot)
   if(!is.null(content$comp_path) && file.exists(content$comp_path)) {
     doc <<- doc %>% 
-      body_add_par("Sensitivity Comparison Plot", style = "heading 2") %>%
-      body_add_img(src = content$comp_path, width = 6, height = 4)
+      body_add_par("Effect Size Estimates (Forest Plot)", style = "heading 2") %>%
+      body_add_img(src = content$comp_path, width = 6, height = 4) %>%
+      body_add_par("Figure Note: This plot compares the effect sizes across different thresholds (e.g., 90th, 95th, 99th percentiles). Consistency across colors indicates that the choice of temperature extreme does not alter the study's conclusions.", style = "Image Caption")
   }
   
   doc <<- doc %>% body_add_break()
