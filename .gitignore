@@ -7,3 +7,5 @@ cmdstan/
 # Model outputs (usually too big for Git)
 *.rds
 *.RData
+*.png
+*.png

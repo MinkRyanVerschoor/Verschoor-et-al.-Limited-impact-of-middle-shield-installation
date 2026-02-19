@@ -464,12 +464,13 @@ loadfonts(device = "all")    # Loads the fonts
 ## Analysis
 
 ```{r Helper function}
+
 ## --- Sensitivity Analysis Function ---
 # This function updates a base model for different temperature thresholds,
 # saves the RDS, and exports the summary text file automatically.
 
-run_sensitivity <- function(base_model, target_vars, data, period_label) {
-  model_list <- list()
+run_sensitivity <- function(base_model, target_vars, data, period_label, ...) {
+  model_results_list <- list()
   
   for (var in target_vars) {
     message(paste0("Running sensitivity analysis for: ", var, " (", period_label, ")"))
@@ -477,61 +478,49 @@ run_sensitivity <- function(base_model, target_vars, data, period_label) {
     # Dynamically update the formula
     new_formula <- as.formula(paste(var, "~ ."))
     
-    # Update the model
-    mod <- update(base_model, formula = new_formula, newdata = data)
+    # Update the model with speed arguments (...)
+    mod <- update(base_model, formula = new_formula, newdata = data, ...)
     
     # Save RDS
     saveRDS(mod, file = here("data", paste0("m_", var, "_", period_label, ".rds")))
     
-    # Save Summary Text
-    sink(here("data", paste0("m_", var, "_", period_label, "_summary.txt")))
-    print(summary(mod))
-    sink()
+    # Extract fixed effects for plotting later
+    res <- broom.mixed::tidy(mod, effects = "fixed", conf.int = TRUE) %>%
+      mutate(model_label = var)
     
-    # Store in list for later plotting
-    model_list[[var]] <- mod
+    model_results_list[[var]] <- res
   }
-  return(model_list)
+  return(bind_rows(model_results_list))
 }
 
-## --- 1. Master Helper Function ---
-# This runs sensitivity models, saves RDS, saves summaries, AND saves the PP-plot
-process_model_group <- function(base_model, target_vars, data, label, group_name) {
+## --- 2. Master Helper Function ---
+process_model_group <- function(base_model, target_vars, data, label, group_name, ...) {
   
-  # Run the sensitivity loop
-  model_list <- run_sensitivity(base_model, target_vars, data, label)
+  # 1. Save PP-Check for the main model immediately
+  # (Addresses reviewer request for clear axis labels)
+  pp_p <- pp_check(base_model, ndraws = 100) + 
+    labs(
+      x = "Temperature (°C)", 
+      y = "Probability Density",
+      title = paste("PP-Check:", group_name),
+      subtitle = "Observed data (y) vs. 100 model simulations (y_rep)"
+    ) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
   
-  # Add the base model to the list (so it's included in plots)
-  # We identify which percentile the base model was (e.g., 95)
-  model_list$base <- base_model 
-  
-  # Save PP-Check for the main model
-pp_p <- pp_check(base_model) + 
-  # Update labels to be clearer for reviewers
-  labs(
-    x = "Temperature (°C)", 
-    y = "Probability Density",
-    title = "Posterior Predictive Check",
-    subtitle = "Comparing observed data (y) to simulated data (y_rep)"
-  ) +
-  theme_minimal()
   ggsave(here("data", "figures", paste0("pp_check_", label, ".png")), pp_p, width = 7, height = 5)
+
+  # 2. Run the sensitivity loop (passing speed arguments through ...)
+  # This returns a dataframe of all thresholds combined
+  all_results <- run_sensitivity(base_model, target_vars, data, label, ...)
   
-  # Generate and save the Comparison Plot (MCMC areas)
-  # Note: This logic handles different naming for 'midshield'
-  draws <- map(model_list, ~ {
-    df <- as_draws_df(.x)
-    # Find the column that contains 'midshield'
-    col_name <- names(df)[grepl("b_midshield", names(df))][1]
-    return(df[[col_name]])
-  })
+  # 3. Include the base model results in the dataframe
+  base_res <- broom.mixed::tidy(base_model, effects = "fixed", conf.int = TRUE) %>%
+    mutate(model_label = "Base (95th)")
   
-  comp_p <- mcmc_areas(do.call(cbind, draws), prob = 0.95) + 
-            labs(title = paste("Sensitivity:", group_name))
+  combined_results <- bind_rows(all_results, base_res)
   
-  ggsave(here("data", "figures", paste0("comparison_", label, ".png")), comp_p, width = 7, height = 5)
-  
-  return(model_list)
+  return(combined_results)
 }
 
 # Define a weakly informative prior for all fixed effects
@@ -553,7 +542,7 @@ day_total_results <- process_model_group(
   group_name   = "Daytime Max Temp", 
   # --- ADD THESE SPEED ARGUMENTS ---
   cores = 4,           # Use 4 cores at once
-  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  chains = 2,          # 2 chains are usually enough for sensitivity checks
   iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
@@ -571,7 +560,7 @@ night_total_results <- process_model_group(
   group_name   = "Nighttime Min Temp", 
   # --- ADD THESE SPEED ARGUMENTS ---
   cores = 4,           # Use 4 cores at once
-  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  chains = 2,          # 2 chains are usually enough for sensitivity checks
   iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
@@ -593,7 +582,7 @@ day_date_results <- process_model_group(
   group_name   = "Daily Day (Interactions)", 
   # --- ADD THESE SPEED ARGUMENTS ---
   cores = 4,           # Use 4 cores at once
-  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  chains = 2,          # 2 chains are usually enough for sensitivity checks
   iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
@@ -615,7 +604,7 @@ night_date_results <- process_model_group(
   group_name   = "Daily Night (Interactions)", 
   # --- ADD THESE SPEED ARGUMENTS ---
   cores = 4,           # Use 4 cores at once
-  chains = 4,          # 2 chains are usually enough for sensitivity checks
+  chains = 2,          # 2 chains are usually enough for sensitivity checks
   iter = 1000         # Drop iterations (500 warmup, 500 sampling)
 )
 
