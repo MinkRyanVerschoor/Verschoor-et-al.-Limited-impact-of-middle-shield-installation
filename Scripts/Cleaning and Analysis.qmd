@@ -41,6 +41,7 @@ library(extrafont)
 library(bayesplot)
 library(posterior)
 
+
 ## --- Directory Setup ---
 # Use here() so this works regardless of where the script is launched
 
@@ -49,6 +50,22 @@ fig_dir  <- here("data", "figures", "revisions")
 
 if (!dir.exists(data_dir)) dir.create(data_dir)
 if (!dir.exists(fig_dir))  dir.create(fig_dir, recursive = TRUE)
+
+## --- Stan Setup ---
+library(cmdstanr)
+library(brms)
+
+# Explicitly set the path for your machine
+# (You will need a similar line use the 'check' logic below)
+if (dir.exists("C:/cmdstan/cmdstan-2.38.0")) {
+  set_cmdstan_path("C:/cmdstan/cmdstan-2.38.0")
+}
+
+# Check that it's actually working (should return 2.38.0)
+cmdstanr::cmdstan_version()
+
+# Use cmdstanr for all brms models
+options(brms.backend = "cmdstanr")
 
 ```
 
@@ -547,8 +564,7 @@ priors <- prior(cauchy(0, 0.5), class = "b")
 
 # --------- SECTION 1: DAY TOTAL ----------#
 m_day_95 <- brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
-      data = microclimate_shield_total_day, prior = priors, cores = 4,             
-  threads = threading(4), chains = 4, iter = 4000, warmup = 1000)
+      data = microclimate_shield_total_day, prior = priors, backend = "cmdstanr",  cores = 4, threads = threading(4), chains = 4, iter = 4000, warmup = 1000)
 
 day_total_results <- process_model_group(
   base_model   = m_day_95,
@@ -557,8 +573,9 @@ day_total_results <- process_model_group(
   label        = "day_total",
   group_name   = "Daytime Max Temp", 
   # --- ADD THESE SPEED ARGUMENTS ---
+  backend = "cmdstanr", 
   cores = 4,
-  threads = threading(4),
+  threads = threading(4), # This uses 2 CPU cores per chain!
   iter = 4000 
 )
 
