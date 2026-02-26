@@ -38,9 +38,8 @@ library(patchwork)
 library(brms)
 library(emmeans)
 library(extrafont)
-library(bayesplot)
-library(posterior)
-
+library(tidybayes)
+library(modelr)
 
 ## --- Directory Setup ---
 # Use here() so this works regardless of where the script is launched
@@ -442,6 +441,14 @@ microclimate_shield_date_night$midshield_binomial<-as.integer(if_else(microclima
 microclimate_shield_total_day$midshield_binomial<-as.integer(if_else(microclimate_shield_total_day$midshield=="present", 1, 0))
 
 microclimate_shield_total_night$midshield_binomial<-as.integer(if_else(microclimate_shield_total_night$midshield=="present", 1, 0))
+
+microclimate_shield_date_day$rad_scaled <- scale(microclimate_shield_date_day$radiation)
+microclimate_shield_date_day$wind_scaled <- scale(microclimate_shield_date_day$max_windspeed)
+microclimate_shield_date_day$Date <- as.factor(microclimate_shield_date_day$Date)
+
+microclimate_shield_date_night$rad_scaled <- scale(microclimate_shield_date_night$radiation)
+microclimate_shield_date_night$wind_scaled <- scale(microclimate_shield_date_night$max_windspeed)
+microclimate_shield_date_night$Date <- as.factor(microclimate_shield_date_night$Date)
 ```
 
 ## Setting up the color palette
@@ -450,12 +457,11 @@ microclimate_shield_total_night$midshield_binomial<-as.integer(if_else(microclim
 
 # Load the color palette and ensure it has enough colors for the unique levels in `treatment`
 # Define the specific colors for each treatment
-palette <- met.brewer("Lakota", n = 6, type = "discrete")
-# Create the expanded palette for the gradient (12 colors for 12 species)
+palette <- met.brewer("Hiroshige", n = 10, type = "discrete")
 
 shield_colors <- c(
-  "present" = palette[5],
-  "absent" = palette[3])
+  "present" = palette[9],
+  "absent" = palette[2])
 
 
 loadfonts(device = "all")    # Loads the fonts
@@ -582,10 +588,6 @@ summary(m_night_05)
 
 # --------- SECTION 3: DAY DAILY (Interactions) ----------#
 
-microclimate_shield_date_day$rad_scaled <- scale(microclimate_shield_date_day$radiation)
-microclimate_shield_date_day$wind_scaled <- scale(microclimate_shield_date_day$max_windspeed)
-microclimate_shield_date_day$Date <- as.factor(microclimate_shield_date_day$Date)
-
 m_day_date_95 <- brm(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
 
 day_date_results <- process_model_group(
@@ -602,10 +604,6 @@ day_date_results <- process_model_group(
 summary(m_day_date_95)
 
 # --------- SECTION 4: NIGHT DAILY ----------#
-
-microclimate_shield_date_night$rad_scaled <- scale(microclimate_shield_date_night$radiation)
-microclimate_shield_date_night$wind_scaled <- scale(microclimate_shield_date_night$max_windspeed)
-microclimate_shield_date_night$Date <- as.factor(microclimate_shield_date_night$Date)
 
 m_night_date_05 <- brm(min_T2_05 ~ midshield_binomial * wind_scaled + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
 
@@ -848,9 +846,9 @@ Plot_A_refined <- ggplot(microclimate_shield_total_day, aes(x = factor(midshield
    theme_minimal() +
   theme(
     axis.title.x = element_blank(),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
+    axis.text.x = element_text(family = "Lato", size = 16),
+    axis.text.y = element_text(family = "Lato", size = 16),
+    axis.title.y = element_text(family = "Lato", size = 16, margin = margin(r = 10)),
     legend.position = "none"
   ) +
   scale_color_manual(values = shield_colors) +
@@ -943,3 +941,191 @@ ggsave(file.path(data_path, "Plot_final.pdf"), combined_plot, width = 14, height
 
 
 ```
+
+```{r new plots }
+
+# ------- Plot 1: Daytime temp vs radiation with model -------- # 
+
+rad_mean <- mean(microclimate_shield_date_day$radiation)
+rad_sd   <- sd(microclimate_shield_date_day$radiation)
+
+microclimate_shield_date_day %>%
+  data_grid(
+    rad_scaled = seq_range(rad_scaled, n = 101),
+    wind_scaled = 0,
+    midshield_binomial = c(0, 1)
+  ) %>%
+  add_epred_draws(m_day_date_95, re_formula = NA) %>%
+  mutate(
+    # Back-transform radiation
+    radiation_J_cm2 = rad_scaled * rad_sd + rad_mean,
+    
+    midshield_binomial = factor(
+      midshield_binomial,
+      levels = c(0, 1),
+      labels = c("absent", "present")
+    )
+  ) %>%
+  ggplot(aes(x = radiation_J_cm2,
+             y = .epred,
+             color = midshield_binomial,
+             fill = midshield_binomial)) +
+  geom_point(data = microclimate_shield_date_day %>%
+               mutate(
+                 temp_C = max_T2_95,
+                 midshield_binomial = factor(
+                   midshield_binomial,
+                   levels = c(0, 1),
+                   labels = c("absent", "present")
+                 )
+               ),
+             aes(x = radiation,
+                 y = temp_C,
+                 color = midshield_binomial),
+             alpha = 0.05,
+             inherit.aes = FALSE) +
+  stat_lineribbon(.width = 0.95,
+                  alpha = 0.5,
+                  size = 1) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  labs(
+    x = expression("Global hourly radiation (J cm"^{-2}*")"),
+    y = expression("Predicted Daytime Max Temp (°C)"),
+    color = "Midshield",
+    fill = "Midshield"
+  )  +
+  theme_classic() +
+  theme(
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
+    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10))
+  ) 
+
+
+# ------- Plot 2: Daytime temp vs wind with model -------- #
+
+wind_mean <- mean(microclimate_shield_date_day$max_windspeed)
+wind_sd   <- sd(microclimate_shield_date_day$max_windspeed)
+
+microclimate_shield_date_day %>%
+  data_grid(
+    wind_scaled = seq_range(wind_scaled, n = 101),
+    rad_scaled = 0,
+    midshield_binomial = c(0, 1)
+  ) %>%
+  add_epred_draws(m_day_date_95, re_formula = NA) %>%
+  mutate(
+    # Back-transform windspeed
+    windspeed_ms = wind_scaled * wind_sd + wind_mean,
+    
+    midshield_binomial = factor(
+      midshield_binomial,
+      levels = c(0, 1),
+      labels = c("absent", "present")
+    )
+  ) %>%
+  ggplot(aes(x = windspeed_ms,
+             y = .epred,
+             color = midshield_binomial,
+             fill = midshield_binomial)) +
+  geom_point(data = microclimate_shield_date_day %>%
+               mutate(
+                 temp_C = max_T2_95,
+                 midshield_binomial = factor(
+                   midshield_binomial,
+                   levels = c(0, 1),
+                   labels = c("absent", "present")
+                 )
+               ),
+             aes(x = max_windspeed,
+                 y = temp_C,
+                 color = midshield_binomial),
+             alpha = 0.05,
+             inherit.aes = FALSE) +
+  stat_lineribbon(.width = 0.95,
+                  alpha = 0.5,
+                  size = 1) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  labs(
+    x = expression("Max hourly windspeed (m/s)"),
+    y = expression("Predicted Daytime Max Temp (°C)"),
+    color = "Midshield",
+    fill = "Midshield"
+  )  +
+  theme_classic() +
+  theme(
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
+    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10))
+  ) 
+
+
+# ------- Plot 3: Nighttime Min Temp vs Wind  -------- #
+
+wind_night_mean <- mean(microclimate_shield_date_night$max_windspeed, na.rm = TRUE)
+wind_night_sd   <- sd(microclimate_shield_date_night$max_windspeed, na.rm = TRUE)
+
+microclimate_shield_date_night %>%
+  data_grid(
+    wind_scaled = seq_range(wind_scaled, n = 101),
+    midshield_binomial = c(0, 1)
+  ) %>%
+  add_epred_draws(m_night_date_05, re_formula = NA) %>%
+  mutate(
+    # Back-transform windspeed
+    windspeed_ms = wind_scaled * wind_night_sd + wind_night_mean,
+    
+    midshield_binomial = factor(
+      midshield_binomial,
+      levels = c(0, 1),
+      labels = c("absent", "present")
+    )
+  ) %>%
+  ggplot(aes(x = windspeed_ms,
+             y = .epred,
+             color = midshield_binomial,
+             fill = midshield_binomial)) +
+  geom_point(data = microclimate_shield_date_night %>%
+               mutate(
+                 temp_C = min_T2_05,
+                 midshield_binomial = factor(
+                   midshield_binomial,
+                   levels = c(0, 1),
+                   labels = c("absent", "present")
+                 )
+               ),
+             aes(x = max_windspeed,
+                 y = temp_C,
+                 color = midshield_binomial),
+             alpha = 0.05,
+             inherit.aes = FALSE) +
+  stat_lineribbon(.width = 0.95,
+                  alpha = 0.5,
+                  size = 1) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  coord_cartesian(ylim = c(10, 25)) +  # Focuses the y-axis between 10 and 25 degrees
+  labs(
+    x = expression("Max hourly windspeed (m/s)"),
+    y = expression("Predicted Night-time Min Temp (°C)"),
+    color = "Midshield",
+    fill = "Midshield"
+  ) +
+  theme_classic() +
+  theme(
+    panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
+    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10))
+  ) 
+
+
+```
+
