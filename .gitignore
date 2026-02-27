@@ -9,3 +9,4 @@ cmdstan/
 *.RData
 *.png
 *.png
+/outputs
