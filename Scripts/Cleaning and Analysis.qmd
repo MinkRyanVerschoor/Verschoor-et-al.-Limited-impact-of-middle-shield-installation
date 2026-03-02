@@ -1147,7 +1147,7 @@ supplement_plot1 <- (Plot_S1 + Plot_S2) +
 supplement_plot1
 
 # Save to file
-ggsave(file.path(data_path, "supplement_plot1.pdf"), supplement_plot1, width = 16, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path(data_path, "supplement_plot1.pdf"), supplement_plot1, width = 24, height = 12, dpi = 300, device = cairo_pdf)
 
 
 # ------- Supplement figure: Daily wind and radiation -------- # 
