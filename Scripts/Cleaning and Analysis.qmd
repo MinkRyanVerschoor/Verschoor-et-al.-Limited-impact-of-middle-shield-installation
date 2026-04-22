@@ -889,7 +889,7 @@ figure_2
 data_path <- "outputs/figures"
 
 # Save to file
-ggsave(file.path(data_path, "figure_2.pdf"), figure_2, width = 16, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path(data_path, "figure_2.jpg"), figure_2, width = 24, height = 12, dpi = 300)
 
 # ------- Figure 3: Daytime temp vs radiation with model -------- # 
 
@@ -1024,7 +1024,7 @@ figure_3 <- (plot_C + plot_D) +
 figure_3
 
 # Save to file
-ggsave(file.path(data_path, "figure_3.pdf"), figure_3, width = 16, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path(data_path, "figure_3.jpg"), figure_3, width = 24, height = 12, dpi = 300)
 
 # ------- Figure 4: Nighttime Min Temp vs Wind  -------- #
 
