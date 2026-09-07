@@ -63,13 +63,13 @@ NOT NEEDED IF ALREADY MADE, CONINUE TO CHUNK BELOW (SAVES LOT OF TIME)
 
 ```{r Loading in Data Zenodo}
 
-# These files are hosted on Zenodo at DOI: 10.5281/zenodo.16677435
+# These files are hosted on Zenodo at https://doi.org/10.5281/zenodo.22640340
 options(timeout = 600) # Increase timeout to 10 minutes
 
 # Define URLs to files on Zenodo
-microclimate_url <- "https://zenodo.org/record/16677435/files/Bioclive_microclimate_shield_2024.csv?download=1"
-design_url <- "https://zenodo.org/record/16677435/files/bioclive_design.csv?download=1"
-weather_url <- "https://zenodo.org/records/18482920/files/TheBilt%20Weather%20station%20data%20KNMI.txt?download=1"
+microclimate_url <- "https://zenodo.org/record/22640340/files/Bioclive_microclimate_shield_2024.csv?download=1"
+design_url <- "https://zenodo.org/record/22640340/files/bioclive_design.csv?download=1"
+weather_url <- "https://zenodo.org/records/22640340/files/TheBilt%20Weather%20station%20data%20KNMI.txt?download=1"
 
 # Define local filenames
 microclimate_file <- "data/Bioclive_microclimate_shield_2024.csv"
@@ -543,11 +543,24 @@ process_model_group <- function(base_model, target_vars, data, label, group_name
   ))
 }
 
-# Define a weakly informative prior for all fixed effects
-priors <- prior(cauchy(0, 0.5), class = "b")
+# Define a weakly informative prior for all fixed and random effects
 
-# Define a weakly informative prior for all fixed effects
-priors <- prior(cauchy(0, 0.5), class = "b")
+priors_total <-  c(
+  prior(normal(0, 0.5), class = "b", coef = "midshield_binomial"),
+  prior(normal(0, 1), class = "sd"),
+  prior(normal(0, 2), class = "sigma")
+)
+
+priors_daily <- c(
+  prior(normal(0, 0.5), class = "b", coef = "midshield_binomial"),
+  prior(normal(0, 1), class = "b", coef = "rad_scaled"),
+  prior(normal(0, 1), class = "b", coef = "wind_scaled"),
+  prior(normal(0, 1), class = "b", coef = "midshield_binomial:rad_scaled"),
+  prior(normal(0, 1), class = "b", coef = "midshield_binomial:wind_scaled"),
+  prior(normal(0, 1), class = "sd"),
+  prior(normal(0, 2), class = "sigma")
+)
+
 
 ```
 
@@ -555,8 +568,18 @@ priors <- prior(cauchy(0, 0.5), class = "b")
 
 # --------- SECTION 1: DAY TOTAL ----------#
 
-m_day_95 <- brm(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
-      data = microclimate_shield_total_day, prior = priors,  cores = 4, chains = 4, iter = 4000, warmup = 1000)
+m_day_95 <- brm(
+  max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),
+  data = microclimate_shield_total_day,
+  prior = priors_total,
+  cores = 4, chains = 4, iter = 4000, warmup = 1000,
+  control = list(adapt_delta = 0.999)
+)
+
+summary(m_day_95)
+
+# Save the models as .rds files
+saveRDS(m_day_95, "m_day_95.rds")
 
 day_total_results <- process_model_group(
   base_model   = m_day_95,
@@ -569,10 +592,13 @@ day_total_results <- process_model_group(
   iter = 4000 
 )
 
-summary(m_day_95)
+saveRDS(day_total_results, "day_total_results.rds")
 
 # --------- SECTION 2: NIGHT TOTAL ----------#
-m_night_05 <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),  data = microclimate_shield_total_night, prior = priors, cores = , chains = 4, iter = 4000, warmup = 1000)
+m_night_05 <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),  data = microclimate_shield_total_night, prior = priors_total, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+
+summary(m_night_05)
+saveRDS(m_night_05, "m_night_05.rds")
 
 night_total_results <- process_model_group(
   base_model   = m_night_05,
@@ -585,11 +611,14 @@ night_total_results <- process_model_group(
   iter = 4000 
 )
 
-summary(m_night_05)
+saveRDS(night_total_results, "night_total_results.rds")
 
 # --------- SECTION 3: DAY DAILY (Interactions) ----------#
 
-m_day_date_95 <- brm(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
+m_day_date_95 <- brm(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day, prior = priors_daily, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+
+summary(m_day_date_95)
+saveRDS(m_day_date_95, "m_day_date_95.rds")
 
 day_date_results <- process_model_group(
   base_model   = m_day_date_95,
@@ -602,11 +631,15 @@ day_date_results <- process_model_group(
   iter = 4000 
 )
 
-summary(m_day_date_95)
+
+saveRDS(day_date_results, "day_date_results.rds")
 
 # --------- SECTION 4: NIGHT DAILY ----------#
 
-m_night_date_05 <- brm(min_T2_05 ~ midshield_binomial * wind_scaled + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, prior = priors, cores = 4, chains = 4, iter = 4000, warmup = 1000)
+m_night_date_05 <- brm(min_T2_05 ~ midshield_binomial * wind_scaled + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, prior = priors_daily, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+
+summary(m_night_date_05)
+saveRDS(m_night_date_05, "m_night_date_05.rds")
 
 night_date_results <- process_model_group(
   base_model   = m_night_date_05,
@@ -619,215 +652,8 @@ night_date_results <- process_model_group(
   iter = 4000 
 )
 
-summary(m_night_date_05)
+saveRDS(night_date_results, "night_date_results.rds")
 
-
-# Save the models as .rds files
-saveRDS(m_day_95, "m_day_95.rds")
-saveRDS(m_night_05, "m_night_05.rds")
-saveRDS(m_day_date_95, "m_day_date_95.rds")
-saveRDS(m_night_date_05, "m_night_date_05.rds")
-
-
-```
-
-## Supplementary info
-
-```{r PP_Check plots & Comparison plots}
-
-# Helper function to generate and save a labeled pp_check
-save_labeled_pp <- function(model, title, filename) {
-  p <- pp_check(model, ndraws = 100) + 
-    labs(
-      title = paste("PP-Check:", title),
-      subtitle = "Observed (y) vs. Simulated (y_rep)",
-      x = "Temperature (°C)", 
-      y = "Probability Density"
-    ) +
-    theme_bw() +
-    theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
-  
-  ggsave(here("data", "figures", filename), p, width = 6, height = 4, dpi = 300)
-}
-
-# USE THIS VERSION to compare 90th, 95th, 99th on one plot
-save_robustness_comp <- function(model_group_results, title, filename) {
-  
-  # 1. Define the specific orders you requested
-  day_order <- c("Base (95th)", "max_T2_90", "max_T2_99", "max_T2")
-  night_order <- c("Base (05th)", "min_T2_10", "min_T2_01", "min_T2")
-  
-  # 2. Check if this is a Night model (contains "min") 
-  is_night <- any(grepl("min", model_group_results$model_label))
-  
-  plot_data <- model_group_results %>%
-    # Fix the label for Nighttime Base so it's not "95th"
-    mutate(model_label = if_else(is_night & model_label == "Base (95th)", "Base (05th)", model_label)) %>%
-    # Set the factor levels based on the model type
-    mutate(model_label = factor(model_label, levels = if(is_night) night_order else day_order))
-
-  p <- ggplot(plot_data, aes(x = estimate, y = term, color = model_label)) +
-    geom_vline(xintercept = 0, color = "black", linetype = "dashed", alpha = 0.5) +
-    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), 
-                   height = 0.4, 
-                   position = position_dodge(width = 0.6)) +
-    geom_point(position = position_dodge(width = 0.6), size = 2.5) +
-    labs(
-      title = title,
-      subtitle = "Sensitivity Analysis: Comparing Thresholds",
-      x = "Effect Size (Temperature Difference °C)",
-      y = "Parameter",
-      color = "Model / Threshold"
-    ) +
-    theme_bw() +
-    scale_color_brewer(palette = "Set1") + 
-    theme(legend.position = "bottom", 
-          axis.title = element_text(face = "bold"),
-          plot.title = element_text(size = 14))
-
-  ggsave(here("data", "figures", filename), p, width = 8, height = 6, dpi = 300)
-}
-
-# --- Execute Plot Generation ---
-
-# --- EXECUTE PLOT GENERATION ---
-
-# 1. Daytime Total Analysis
-save_labeled_pp(m_day_95, "Daytime Max", "pp_check_day_total.png")
-# Fix: Access the $plot_data element from the list
-save_robustness_comp(day_total_results$plot_data, "Daytime Max Totals", "comparison_day_total.png")
-
-# 2. Nighttime Total Analysis
-save_labeled_pp(m_night_05, "Nighttime Min", "pp_check_night_total.png")
-# Fix: Access the $plot_data element from the list
-save_robustness_comp(night_total_results$plot_data, "Nighttime Min Totals", "comparison_night_total.png")
-
-# 3. Daily Day Analysis (Interactions)
-save_labeled_pp(m_day_date_95, "Daily Day (Interactions)", "pp_check_day_date.png")
-# Fix: Access the $plot_data element from the list
-save_robustness_comp(day_date_results$plot_data, "Daily Day Interactions", "comparison_day_date.png")
-
-# 4. Daily Night Analysis (Interactions)
-save_labeled_pp(m_night_date_05, "Daily Night (Interactions)", "pp_check_night_date.png")
-# Fix: Access the $plot_data element from the list
-save_robustness_comp(night_date_results$plot_data, "Daily Night Interactions", "comparison_night_date.png")
-
-```
-
-```{r Supplementary info}
-
-# ----- Bayesian Results Table (Includes Fixed Effects & Hyperparameters) -----
-make_bayesian_table <- function(model_data, title, subtitle = "Main Model") {
-  
-  # Handle list or model input
-  if(is.list(model_data) && "full_table" %in% names(model_data)) {
-    tab_data <- model_data$full_table
-  } else {
-    tab_data <- broom.mixed::tidy(model_data, effects = c("fixed", "ran_pars"), conf.int = TRUE)
-  }
-
-  tab <- tab_data %>%
-    # Use the 'group' column to give the SDs unique names
-    mutate(Parameter = case_when(
-      effect == "ran_pars" & term == "sd__(Intercept)" ~ paste0("SD (Intercept: ", group, ")"),
-      effect == "ran_pars" & term == "sd__Observation" ~ "SD (Residual)",
-      # Clean up Intercept for fixed effects
-      term == "(Intercept)" ~ "Intercept (Grand Mean)",
-      TRUE ~ term
-    )) %>%
-    mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
-    select(Parameter, estimate, std.error, conf.low, conf.high) %>%
-    rename(
-      `Posterior Mean` = estimate,
-      `Est. Error` = std.error,
-      `95% Lower CI` = conf.low,
-      `95% Upper CI` = conf.high
-    )
-
-  ft <- flextable::flextable(tab) %>%
-    flextable::theme_vanilla() %>%
-    flextable::set_caption(caption = paste(title, "-", subtitle)) %>%
-    # Subtle gray background for the SD rows to separate them from fixed effects
-    flextable::bg(i = ~ grepl("SD \\(", Parameter), bg = "gray97") %>%
-    flextable::italic(i = ~ grepl("SD \\(", Parameter)) %>%
-    flextable::autofit()
-  
-  return(ft)
-}
-
-# --- Build the master list for the Word Doc ---
-# Note: 'main' is now the output from our new process_model_group
-# --- Build the master list for the Word Doc ---
-full_supplement_list <- list(
-  
-  "Daytime Maximum Temperature (Total Period)" = list(
-    results   = day_total_results, 
-    pp_path   = here("data", "figures", "pp_check_day_total.png"),
-    qq_path   = here("data", "figures", "pp_qq_day_total.png"),
-    comp_path = here("data", "figures", "comparison_day_total.png")
-  ),
-
-  "Nighttime Minimum Temperature (Total Period)" = list(
-    results   = night_total_results,
-    pp_path   = here("data", "figures", "pp_check_night_total.png"),
-    qq_path   = here("data", "figures", "pp_qq_night_total.png"),
-    comp_path = here("data", "figures", "comparison_night_total.png")
-  ),
-
-  "Daytime Maximum Temperature (Daily Interactions)" = list(
-    results   = day_date_results, 
-    pp_path   = here("data", "figures", "pp_check_day_date.png"),
-    qq_path   = here("data", "figures", "pp_qq_day_date.png"),
-    comp_path = here("data", "figures", "comparison_day_date.png")
-  ),
-
-  "Nighttime Minimum Temperature (Daily Interactions)" = list(
-    results   = night_date_results,
-    pp_path   = here("data", "figures", "pp_check_night_date.png"),
-    qq_path   = here("data", "figures", "pp_qq_night_date.png"),
-    comp_path = here("data", "figures", "comparison_night_date.png")
-  ) # No comma here because it is the last item in the master list
-)
-
-# --- Generate the Document ---
-doc <- read_docx()
-
-iwalk(full_supplement_list, function(content, title) {
-  
-  doc <<- doc %>%
-    body_add_par(title, style = "heading 1") %>%
-    body_add_par("Main Bayesian Model Summary (Fixed & Random Effects)", style = "heading 2") %>%
-    # FIX: Pass 'content$results' (the list), NOT 'content$results$full_table'
-    body_add_flextable(make_bayesian_table(content$results, title))
-  
-  # A. Standard PP-Check
-  if(!is.null(content$pp_path) && file.exists(content$pp_path)) {
-    doc <<- doc %>% 
-      body_add_par("Posterior Predictive Check: Distribution", style = "heading 2") %>%
-      body_add_img(src = content$pp_path, width = 6, height = 4) %>%
-      body_add_par("Figure Note: The dark line (y) is observed data; light lines (y_rep) are simulations. This shows how well the model captures the overall shape of the temperature distribution.", style = "Image Caption")
-  }
-
-  # B. LOO-PIT QQ-Plot (Calibration Check)
-  if(!is.null(content$qq_path) && file.exists(content$qq_path)) {
-    doc <<- doc %>% 
-      body_add_par("Model Calibration: LOO-PIT QQ-Plot", style = "heading 2") %>%
-      body_add_img(src = content$qq_path, width = 6, height = 4) %>%
-      body_add_par("Figure Note: This plot assesses calibration. If the points follow the diagonal line, the model's uncertainty and probability of extremes are correctly estimated.", style = "Image Caption")
-  }
-
-  # C. Comparison Plot (Robustness)
-  if(!is.null(content$comp_path) && file.exists(content$comp_path)) {
-    doc <<- doc %>% 
-      body_add_par("Sensitivity Analysis (Threshold Comparison)", style = "heading 2") %>%
-      body_add_img(src = content$comp_path, width = 6, height = 4) %>%
-      body_add_par("Figure Note: Comparison of effect sizes across 90th, 95th, and 99th percentiles. Consistency across thresholds demonstrates result robustness.", style = "Image Caption")
-  }
-  
-  doc <<- doc %>% body_add_break()
-})
-
-print(doc, target = here("Manuscript", "Full_Automated_Supplement.docx"))
 ```
 
 ## Plots
@@ -1227,6 +1053,347 @@ Plot_dual
 # Save to file
 ggsave(file.path(data_path, "supplement_plot2.pdf"), Plot_dual, width = 12, height = 12, dpi = 300, device = cairo_pdf)
 
+
+```
+
+```{r Model based plots}
+
+
+# --- 1. Posterior Expectations for Day Model ---
+day_pred <- microclimate_shield_total_day %>%
+  distinct(midshield_binomial) %>%
+  add_epred_draws(m_day_95, re_formula = NA) %>%
+  mutate(
+    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
+  )
+
+Plot_A_model <- ggplot(day_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
+  stat_halfeye(
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "left",
+    scale = 0.6,
+    justification = 1.15
+  ) +
+  coord_cartesian(ylim = c(30.5, 37)) +
+  labs(
+    x = "Shield Configuration", 
+    y = "Max Temp (°C) at 1 cm (11:00 - 17:00)"
+  ) +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
+    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    legend.position = "none",
+    panel.grid.major.x = element_blank()
+  )
+
+# --- 2. Posterior Expectations for Night Model ---
+night_pred <- microclimate_shield_total_night %>%
+  distinct(midshield_binomial) %>%
+  add_epred_draws(m_night_05, re_formula = NA) %>%
+  mutate(
+    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
+  )
+
+Plot_B_model <- ggplot(night_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
+  stat_halfeye(
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "left",
+    scale = 0.6,
+    justification = 1.15
+  ) +
+  coord_cartesian(ylim = c(12.5, 15.2)) +
+  labs(
+    x = "Shield Configuration", 
+    y = "Min Temp (°C) at 1 cm (23:00 - 05:00)"
+  ) +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 16),
+    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
+    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.text.x = element_text(family = "Arial", size = 16),
+    axis.text.y = element_text(family = "Arial", size = 16),
+    legend.position = "none",
+    panel.grid.major.x = element_blank()
+  )
+
+# ------- Combine and Adjust Layout -------- #
+figure_2 <- (Plot_A_model + Plot_B_model) + 
+  plot_annotation(tag_levels = 'A') & 
+  theme(plot.tag = element_text(size = 20, face = "bold", family = "Arial"))
+
+figure_2
+
+# Save to file
+ggsave(file.path("outputs/figures", "figure_2.jpg"), figure_2, width = 24, height = 12, dpi = 300)
+```
+
+## Supplementary info
+
+```{r PP_Check plots & Comparison plots}
+
+# Helper function to generate and save a labeled pp_check
+save_labeled_pp <- function(model, title, filename) {
+  p <- pp_check(model, ndraws = 100) + 
+    labs(
+      title = paste("PP-Check:", title),
+      subtitle = "Observed (y) vs. Simulated (y_rep)",
+      x = "Temperature (°C)", 
+      y = "Probability Density"
+    ) +
+    theme_bw() +
+    theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
+  
+  ggsave(here("data", "figures", filename), p, width = 6, height = 4, dpi = 300)
+}
+
+# USE THIS VERSION to compare 90th, 95th, 99th on one plot
+save_robustness_comp <- function(model_group_results, title, filename) {
+  
+  # 1. Define the specific orders you requested
+  day_order <- c("Base (95th)", "max_T2_90", "max_T2_99", "max_T2")
+  night_order <- c("Base (05th)", "min_T2_10", "min_T2_01", "min_T2")
+  
+  # 2. Check if this is a Night model (contains "min") 
+  is_night <- any(grepl("min", model_group_results$model_label))
+  
+  plot_data <- model_group_results %>%
+    # Fix the label for Nighttime Base so it's not "95th"
+    mutate(model_label = if_else(is_night & model_label == "Base (95th)", "Base (05th)", model_label)) %>%
+    # Set the factor levels based on the model type
+    mutate(model_label = factor(model_label, levels = if(is_night) night_order else day_order))
+
+  p <- ggplot(plot_data, aes(x = estimate, y = term, color = model_label)) +
+    geom_vline(xintercept = 0, color = "black", linetype = "dashed", alpha = 0.5) +
+    geom_errorbarh(aes(xmin = conf.low, xmax = conf.high), 
+                   height = 0.4, 
+                   position = position_dodge(width = 0.6)) +
+    geom_point(position = position_dodge(width = 0.6), size = 2.5) +
+    labs(
+      title = title,
+      subtitle = "Sensitivity Analysis: Comparing Thresholds",
+      x = "Effect Size (Temperature Difference °C)",
+      y = "Parameter",
+      color = "Model / Threshold"
+    ) +
+    theme_bw() +
+    scale_color_brewer(palette = "Set1") + 
+    theme(legend.position = "bottom", 
+          axis.title = element_text(face = "bold"),
+          plot.title = element_text(size = 14))
+
+  ggsave(here("data", "figures", filename), p, width = 8, height = 6, dpi = 300)
+}
+
+# --- Execute Plot Generation ---
+
+# --- EXECUTE PLOT GENERATION ---
+
+# 1. Daytime Total Analysis
+save_labeled_pp(m_day_95, "Daytime Max", "pp_check_day_total.png")
+# Fix: Access the $plot_data element from the list
+save_robustness_comp(day_total_results$plot_data, "Daytime Max Totals", "comparison_day_total.png")
+
+# 2. Nighttime Total Analysis
+save_labeled_pp(m_night_05, "Nighttime Min", "pp_check_night_total.png")
+# Fix: Access the $plot_data element from the list
+save_robustness_comp(night_total_results$plot_data, "Nighttime Min Totals", "comparison_night_total.png")
+
+# 3. Daily Day Analysis (Interactions)
+save_labeled_pp(m_day_date_95, "Daily Day (Interactions)", "pp_check_day_date.png")
+# Fix: Access the $plot_data element from the list
+save_robustness_comp(day_date_results$plot_data, "Daily Day Interactions", "comparison_day_date.png")
+
+# 4. Daily Night Analysis (Interactions)
+save_labeled_pp(m_night_date_05, "Daily Night (Interactions)", "pp_check_night_date.png")
+# Fix: Access the $plot_data element from the list
+save_robustness_comp(night_date_results$plot_data, "Daily Night Interactions", "comparison_night_date.png")
+
+```
+
+```{r Supplementary info}
+
+# ----- Bayesian Results Table (Includes Fixed Effects & Hyperparameters) -----
+make_bayesian_table <- function(model_data, title, subtitle = "Main Model") {
+  
+  # Handle list or model input
+  if(is.list(model_data) && "full_table" %in% names(model_data)) {
+    tab_data <- model_data$full_table
+  } else {
+    tab_data <- broom.mixed::tidy(model_data, effects = c("fixed", "ran_pars"), conf.int = TRUE)
+  }
+
+  tab <- tab_data %>%
+    # Use the 'group' column to give the SDs unique names
+    mutate(Parameter = case_when(
+      effect == "ran_pars" & term == "sd__(Intercept)" ~ paste0("SD (Intercept: ", group, ")"),
+      effect == "ran_pars" & term == "sd__Observation" ~ "SD (Residual)",
+      # Clean up Intercept for fixed effects
+      term == "(Intercept)" ~ "Intercept (Grand Mean)",
+      TRUE ~ term
+    )) %>%
+    mutate(across(where(is.numeric), ~ round(.x, 3))) %>%
+    select(Parameter, estimate, std.error, conf.low, conf.high) %>%
+    rename(
+      `Posterior Mean` = estimate,
+      `Est. Error` = std.error,
+      `95% Lower CI` = conf.low,
+      `95% Upper CI` = conf.high
+    )
+
+  ft <- flextable::flextable(tab) %>%
+    flextable::theme_vanilla() %>%
+    flextable::set_caption(caption = paste(title, "-", subtitle)) %>%
+    # Subtle gray background for the SD rows to separate them from fixed effects
+    flextable::bg(i = ~ grepl("SD \\(", Parameter), bg = "gray97") %>%
+    flextable::italic(i = ~ grepl("SD \\(", Parameter)) %>%
+    flextable::autofit()
+  
+  return(ft)
+}
+
+# --- Build the master list for the Word Doc ---
+# Note: 'main' is now the output from our new process_model_group
+# --- Build the master list for the Word Doc ---
+full_supplement_list <- list(
+  
+  "Daytime Maximum Temperature (Total Period)" = list(
+    results   = day_total_results, 
+    pp_path   = here("data", "figures", "pp_check_day_total.png"),
+    qq_path   = here("data", "figures", "pp_qq_day_total.png"),
+    comp_path = here("data", "figures", "comparison_day_total.png")
+  ),
+
+  "Nighttime Minimum Temperature (Total Period)" = list(
+    results   = night_total_results,
+    pp_path   = here("data", "figures", "pp_check_night_total.png"),
+    qq_path   = here("data", "figures", "pp_qq_night_total.png"),
+    comp_path = here("data", "figures", "comparison_night_total.png")
+  ),
+
+  "Daytime Maximum Temperature (Daily Interactions)" = list(
+    results   = day_date_results, 
+    pp_path   = here("data", "figures", "pp_check_day_date.png"),
+    qq_path   = here("data", "figures", "pp_qq_day_date.png"),
+    comp_path = here("data", "figures", "comparison_day_date.png")
+  ),
+
+  "Nighttime Minimum Temperature (Daily Interactions)" = list(
+    results   = night_date_results,
+    pp_path   = here("data", "figures", "pp_check_night_date.png"),
+    qq_path   = here("data", "figures", "pp_qq_night_date.png"),
+    comp_path = here("data", "figures", "comparison_night_date.png")
+  ) # No comma here because it is the last item in the master list
+)
+
+# --- Generate the Document ---
+doc <- read_docx()
+
+iwalk(full_supplement_list, function(content, title) {
+  
+  doc <<- doc %>%
+    body_add_par(title, style = "heading 1") %>%
+    body_add_par("Main Bayesian Model Summary (Fixed & Random Effects)", style = "heading 2") %>%
+    # FIX: Pass 'content$results' (the list), NOT 'content$results$full_table'
+    body_add_flextable(make_bayesian_table(content$results, title))
+  
+  # A. Standard PP-Check
+  if(!is.null(content$pp_path) && file.exists(content$pp_path)) {
+    doc <<- doc %>% 
+      body_add_par("Posterior Predictive Check: Distribution", style = "heading 2") %>%
+      body_add_img(src = content$pp_path, width = 6, height = 4) %>%
+      body_add_par("Figure Note: The dark line (y) is observed data; light lines (y_rep) are simulations. This shows how well the model captures the overall shape of the temperature distribution.", style = "Image Caption")
+  }
+
+  # B. LOO-PIT QQ-Plot (Calibration Check)
+  if(!is.null(content$qq_path) && file.exists(content$qq_path)) {
+    doc <<- doc %>% 
+      body_add_par("Model Calibration: LOO-PIT QQ-Plot", style = "heading 2") %>%
+      body_add_img(src = content$qq_path, width = 6, height = 4) %>%
+      body_add_par("Figure Note: This plot assesses calibration. If the points follow the diagonal line, the model's uncertainty and probability of extremes are correctly estimated.", style = "Image Caption")
+  }
+
+  # C. Comparison Plot (Robustness)
+  if(!is.null(content$comp_path) && file.exists(content$comp_path)) {
+    doc <<- doc %>% 
+      body_add_par("Sensitivity Analysis (Threshold Comparison)", style = "heading 2") %>%
+      body_add_img(src = content$comp_path, width = 6, height = 4) %>%
+      body_add_par("Figure Note: Comparison of effect sizes across 90th, 95th, and 99th percentiles. Consistency across thresholds demonstrates result robustness.", style = "Image Caption")
+  }
+  
+  doc <<- doc %>% body_add_break()
+})
+
+print(doc, target = here("Manuscript", "Full_Automated_Supplement.docx"))
+```
+
+```{r Frequentist stat check}
+
+# To save time having to run the models, load them directly from here to create plots and tables
+
+#load rds file 
+
+brms_day_95 <- readRDS("m_day_95.rds")
+
+summary(brms_day_95)
+
+brms_night_05 <- readRDS("m_night_05.rds")
+
+summary(brms_night_05)
+
+# Daily resolution
+
+brms_day_date_95 <- readRDS("m_day_date_95.rds")
+
+summary(brms_day_date_95)
+
+brms_night_date_05 <- readRDS("m_night_date_05.rds")
+
+summary(brms_night_date_05)
+
+# Re-run the modfels using lme4
+
+library(lme4)
+
+lmer_day_95 <- lmer(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
+      data = microclimate_shield_total_day)
+
+summary(lmer_day_95)
+
+###################################
+
+lmer_day_date_95 <- lmer(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day)
+
+summary(lmer_day_date_95)
+
+install.packages(c("performance", "see", "qqplotr"))
+library(performance)
+
+plot(lmer_day_date_95)
+qqplot(lmer_day_date_95)
+
+# Generates a 6-panel diagnostic dashboard for lmerMod
+check_model(lmer_day_date_95)
+
+# Store the check plot object
+p_diag <- check_model(lmer_day_date_95)
+
+# Save with expanded dimensions (14 x 16 inches)
+ggsave("lmer_diagnostics.pdf", plot = plot(p_diag), width = 14, height = 16, dpi = 300)
 
 ```
 
