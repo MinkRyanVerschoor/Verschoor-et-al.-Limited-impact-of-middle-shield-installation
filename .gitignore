@@ -12,3 +12,4 @@ cmdstan/
 *.png
 *.png
 /outputs
+Data/Bioclive_microclimate_shield_2024.csv
