@@ -41,6 +41,8 @@ library(extrafont)
 library(tidybayes)
 library(modelr)
 library(scales)
+library(cmdstanr)
+
 
 ## --- Directory Setup ---
 # Use here() so this works regardless of where the script is launched
@@ -184,14 +186,14 @@ microclimate_shield[, midshield := ifelse(
 # Loading the bilt weather station data 
 weather_data <- weather_data %>%
   # Select only the variables you need
-  # TX: Max Temp, TG: Mean Temp, FHX: Max Wind, Q: Radiation, SQ: Sunshine
-  select(YYYYMMDD, TX, TG, FHX, Q, SQ) %>%
+  # TX: Max Temp, TG: Mean Temp, FHX: mean Windspeed, Q: Radiation, SQ: Sunshine
+  select(YYYYMMDD, TX, TG, FG, Q, SQ) %>%
   rename(
     Date = YYYYMMDD,
     max_temp = TX,             # Maximum temperature (in 0.1 °C)
     mean_temp = TG,            # Mean temperature (in 0.1 °C)
-    max_windspeed = FHX,       # Highest hourly average windspeed (in 0.1 m/s)
-    radiation = Q,             # Global radiation (in J/cm2)
+    mean_windspeed = FG,       # Daily mean windspeed (in 0.1 m/s)
+    radiation = Q,             # Daily total (sum) global radiation (in J/cm2)
     sunshine_min = SQ          # Sunshine duration (in 0.1 hours)
   ) %>%
   mutate(
@@ -203,15 +205,16 @@ weather_data <- weather_data %>%
     mean_temp = mean_temp * 0.1,
     
     # 3. Convert Max Windspeed from 0.1 m/s to m/s
-    max_windspeed = max_windspeed * 0.1,
+    mean_windspeed = mean_windspeed * 0.1,
     
     # 4. Convert Sunshine from 0.1 hours to Minutes
     # Formula: (Raw Value * 0.1) * 60  => Raw Value * 6
     sunshine_min = sunshine_min * 6,
     
-    # 5. Radiation (Q) remains in J/cm2
-    radiation = radiation 
-  )%>%
+    # 5. Convert Radiation (Q) from J/cm2 (daily sum) to MJ/m2/day
+    # Conversion: 1 J/cm2 = 0.01 MJ/m2 (i.e., J/cm2 * 10^4 J/m2, then / 10^6 for MJ)
+    radiation = radiation * 0.01
+  ) %>%
   filter(Date >= as.Date("2024-08-05") & Date <= as.Date("2024-09-04"))
 
 ```
@@ -236,7 +239,6 @@ microclimate_shield$Time <- as.POSIXct(microclimate_shield$Time, format="%H:%M:%
 microclimate_shield_day <- microclimate_shield[
   format(Time, "%H:%M:%S") >= "11:00:00" & 
   format(Time, "%H:%M:%S") <= "17:00:00" & 
-  !(subplot %in% c("63B", "58A")) &
   (SWC > 0 | is.na(SWC)) &
   # Temperature bounds (using 60 as per your last snippet)
   (T1 <= 60 & T1 >= -20 | is.na(T1)) &
@@ -249,7 +251,7 @@ microclimate_shield_day <- microclimate_shield[
 # Filtering for Deep Night (23:00 - 05:00)
 microclimate_shield_night <- microclimate_shield[
   (format(Time, "%H:%M:%S") >= "23:00:00" | format(Time, "%H:%M:%S") <= "05:00:00") & 
-  !(subplot %in% c("63B", "58A")) &
+  !(subplot %in% c("34b")) &
   (SWC > 0 | is.na(SWC)) &
   (T1 <= 60 & T1 >= -20 | is.na(T1)) &
   (T2 <= 60 & T2 >= -20 | is.na(T2)) &
@@ -444,11 +446,11 @@ microclimate_shield_total_day$midshield_binomial<-as.integer(if_else(microclimat
 microclimate_shield_total_night$midshield_binomial<-as.integer(if_else(microclimate_shield_total_night$midshield=="present", 1, 0))
 
 microclimate_shield_date_day$rad_scaled <- scale(microclimate_shield_date_day$radiation)
-microclimate_shield_date_day$wind_scaled <- scale(microclimate_shield_date_day$max_windspeed)
+microclimate_shield_date_day$wind_scaled <- scale(microclimate_shield_date_day$mean_windspeed)
 microclimate_shield_date_day$Date <- as.factor(microclimate_shield_date_day$Date)
 
 microclimate_shield_date_night$rad_scaled <- scale(microclimate_shield_date_night$radiation)
-microclimate_shield_date_night$wind_scaled <- scale(microclimate_shield_date_night$max_windspeed)
+microclimate_shield_date_night$wind_scaled <- scale(microclimate_shield_date_night$mean_windspeed)
 microclimate_shield_date_night$Date <- as.factor(microclimate_shield_date_night$Date)
 ```
 
@@ -473,33 +475,65 @@ loadfonts(device = "all")    # Loads the fonts
 
 ```{r Helper function}
 
-## --- 1. Enhanced Sensitivity Analysis Function ---
-run_sensitivity <- function(base_model, target_vars, data, period_label, ...) {
+## ---  Sensitivity Analysis Function ---
+run_sensitivity <- function(
+  base_model,
+  target_vars,
+  data,
+  period_label,
+  priors,
+  ...
+) {
+  
   model_results_list <- list()
   
   for (var in target_vars) {
-    message(paste0("Running sensitivity analysis for: ", var, " (", period_label, ")"))
     
-    # Dynamically update the formula while keeping random effects and interactions
-    new_formula <- update.formula(formula(base_model), as.formula(paste(var, "~ .")))
+    message(
+      paste0(
+        "Running sensitivity analysis for: ",
+        var,
+        " (",
+        period_label,
+        ")"
+      )
+    )
     
-    # Update the model with speed arguments (...)
-    mod <- update(base_model, formula = new_formula, newdata = data, ...)
+    new_formula <- update.formula(
+      formula(base_model),
+      as.formula(paste(var, "~ ."))
+    )
     
-    # Save RDS for archival
-    saveRDS(mod, file = here("data", paste0("m_", var, "_", period_label, ".rds")))
+    mod <- update(
+      base_model,
+      formula = new_formula,
+      newdata = data,
+      prior = priors,
+      ...
+    )
     
-    # Extract fixed effects for the comparison plots
-    res <- broom.mixed::tidy(mod, effects = "fixed", conf.int = TRUE) %>%
+    saveRDS(
+      mod,
+      file = here(
+        "outputs/models",
+        paste0("m_", var, "_", period_label, ".rds")
+      )
+    )
+    
+    res <- broom.mixed::tidy(
+      mod,
+      effects = "fixed",
+      conf.int = TRUE
+    ) %>%
       mutate(model_label = var)
     
     model_results_list[[var]] <- res
   }
-  return(bind_rows(model_results_list))
+  
+  bind_rows(model_results_list)
 }
-
 ## --- 2. Master Helper Function ---
-process_model_group <- function(base_model, target_vars, data, label, group_name, ...) {
+process_model_group <- function(base_model, target_vars, data, label, group_name, priors, ...) {
   
   # --- A. Standard Density PP-Check ---
   pp_dens <- pp_check(base_model, ndraws = 100) + 
@@ -512,7 +546,7 @@ process_model_group <- function(base_model, target_vars, data, label, group_name
     theme_bw() +
     theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
   
-  ggsave(here("data", "figures", paste0("pp_check_", label, ".png")), pp_dens, width = 7, height = 5)
+  ggsave(here("outputs", "figures", paste0("pp_check_", label, ".png")), pp_dens, width = 7, height = 5)
 
   # --- B. LOO-PIT QQ-Plot (Calibration Check) ---
   # Requires library(loo)
@@ -526,10 +560,17 @@ process_model_group <- function(base_model, target_vars, data, label, group_name
     theme_bw() +
     theme(axis.title = element_text(face = "bold"), plot.title = element_text(hjust = 0.5))
     
-  ggsave(here("data", "figures", paste0("pp_qq_", label, ".png")), pp_qq, width = 7, height = 5)
+  ggsave(here("outputs", "figures", paste0("pp_qq_", label, ".png")), pp_qq, width = 7, height = 5)
 
   # --- C. Run Sensitivity Loop ---
-  all_results <- run_sensitivity(base_model, target_vars, data, label, ...)
+ all_results <- run_sensitivity(
+  base_model = base_model,
+  target_vars = target_vars,
+  data = data,
+  period_label = label,
+  priors = priors,
+  ...
+)
   
   # --- D. Extract Main Model Results (Fixed + Hyperparameters) ---
   # Including 'ran_pars' ensures we get sd(Intercept) for Date, Wall distance, etc.
@@ -543,24 +584,234 @@ process_model_group <- function(base_model, target_vars, data, label, group_name
   ))
 }
 
+```
+
+## Set-up the priors for the models
+
+```{r Define priors}
+
 # Define a weakly informative prior for all fixed and random effects
 
-priors_total <-  c(
-  prior(normal(0, 0.5), class = "b", coef = "midshield_binomial"),
-  prior(normal(0, 1), class = "sd"),
-  prior(normal(0, 2), class = "sigma")
-)
+# Monthly - day
 
-priors_daily <- c(
-  prior(normal(0, 0.5), class = "b", coef = "midshield_binomial"),
-  prior(normal(0, 1), class = "b", coef = "rad_scaled"),
-  prior(normal(0, 1), class = "b", coef = "wind_scaled"),
-  prior(normal(0, 1), class = "b", coef = "midshield_binomial:rad_scaled"),
-  prior(normal(0, 1), class = "b", coef = "midshield_binomial:wind_scaled"),
-  prior(normal(0, 1), class = "sd"),
-  prior(normal(0, 2), class = "sigma")
-)
+make_monthly_priors <- function(shield_sd = 1) {
+  
+  c(
+    set_prior(
+      paste0("normal(0, ", shield_sd, ")"),
+      class = "b",
+      coef = "midshield_binomial"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "div"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "treatment"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "dist_wall"
+    ),
+    
+    set_prior(
+      "normal(0, 2)",
+      class = "sigma"
+    )
+  )
+}
 
+# Monthly - Night
+
+make_monthly_night_priors <- function(
+  shield_sd = 2,
+  group_sd = 0.5,
+  sigma_sd = 1
+) {
+  
+  c(
+    set_prior(
+      paste0("normal(0, ", shield_sd, ")"),
+      class = "b",
+      coef = "midshield_binomial"
+    ),
+    
+    set_prior(
+      paste0("normal(0, ", group_sd, ")"),
+      class = "sd",
+      group = "div"
+    ),
+    
+    set_prior(
+      paste0("normal(0, ", group_sd, ")"),
+      class = "sd",
+      group = "treatment"
+    ),
+    
+    set_prior(
+      paste0("normal(0, ", group_sd, ")"),
+      class = "sd",
+      group = "dist_wall"
+    ),
+    
+    set_prior(
+      paste0("normal(0, ", sigma_sd, ")"),
+      class = "sigma"
+    )
+  )
+}
+
+# Daily levels
+
+make_daily_day_priors <- function(shield_sd = 1) {
+  
+  c(
+    # Middle-shield effect
+    set_prior(
+      paste0("normal(0, ", shield_sd, ")"),
+      class = "b",
+      coef = "midshield_binomial"
+    ),
+    
+    # Weather and interaction effects: predictors are standardized
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "rad_scaled"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "wind_scaled"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "midshield_binomial:rad_scaled"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "midshield_binomial:wind_scaled"
+    ),
+    
+    # Persistent probe-to-probe variation
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "probe"
+    ),
+    
+    # Experimental-design grouping terms
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "div"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "treatment"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "dist_wall"
+    ),
+    
+    # Day-to-day variation may plausibly be larger
+    set_prior(
+      "normal(0, 2)",
+      class = "sd",
+      group = "Date"
+    ),
+    
+    # Residual variation
+    set_prior(
+      "normal(0, 2)",
+      class = "sigma"
+    )
+  )
+}
+
+# Daily - Night
+
+make_daily_night_priors <- function(shield_sd = 2) {
+  
+  c(
+    # Middle-shield main effect
+    set_prior(
+      paste0("normal(0, ", shield_sd, ")"),
+      class = "b",
+      coef = "midshield_binomial"
+    ),
+    
+    # Wind main effect
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "wind_scaled"
+    ),
+    
+    # Shield-by-wind interaction
+    set_prior(
+      "normal(0, 1)",
+      class = "b",
+      coef = "midshield_binomial:wind_scaled"
+    ),
+    
+    # Probe-level variation
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "probe"
+    ),
+    
+    # Other grouping variables
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "div"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "treatment"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "dist_wall"
+    ),
+    
+    # Date-level variation
+    set_prior(
+      "normal(0, 2)",
+      class = "sd",
+      group = "Date"
+    ),
+    
+    # Residual variation
+    set_prior(
+      "normal(0, 2)",
+      class = "sigma"
+    )
+  )
+}
 
 ```
 
@@ -569,17 +820,25 @@ priors_daily <- c(
 # --------- SECTION 1: DAY TOTAL ----------#
 
 m_day_95 <- brm(
-  max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),
-  data = microclimate_shield_total_day,
-  prior = priors_total,
-  cores = 4, chains = 4, iter = 4000, warmup = 1000,
-  control = list(adapt_delta = 0.999)
-)
+     max_T2_95 ~ midshield_binomial +
+         (1 | div) +
+         (1 | treatment) +
+         (1 | dist_wall),
+     data = microclimate_shield_total_day,
+     family = gaussian(),
+     prior = make_monthly_priors(shield_sd = 2),
+     chains = 4,
+     cores = 4,
+     threads = threading(4),
+     iter = 6000,
+     warmup = 1500,
+     backend = "cmdstanr",
+     control = list(adapt_delta = 0.999))
 
 summary(m_day_95)
 
 # Save the models as .rds files
-saveRDS(m_day_95, "m_day_95.rds")
+saveRDS(m_day_95, "outputs/models/m_day_95.rds")
 
 day_total_results <- process_model_group(
   base_model   = m_day_95,
@@ -587,15 +846,29 @@ day_total_results <- process_model_group(
   data         = microclimate_shield_total_day,
   label        = "day_total",
   group_name   = "Daytime Max Temp", 
-  # --- ADD THESE SPEED ARGUMENTS ---
-  cores = 4,
-  iter = 4000 
+  priors = make_monthly_priors(shield_sd = 2),
+# --- PASS BACKEND & SPEED ARGUMENTS HERE ---
+  backend = "cmdstanr",
+  cores   = 4,
+  threads = threading(4),
+  iter    = 6000,
+  warmup  = 1500
 )
 
 saveRDS(day_total_results, "day_total_results.rds")
 
 # --------- SECTION 2: NIGHT TOTAL ----------#
-m_night_05 <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),  data = microclimate_shield_total_night, prior = priors_total, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+m_night_05 <- brm(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall),  
+     data =   microclimate_shield_total_night,
+     family = gaussian(),
+     prior = make_monthly_night_priors(shield_sd = 2),
+     chains = 4,
+     cores = 4,
+     threads = threading(4),
+     iter = 6000,
+     warmup = 1500,
+     backend = "cmdstanr",
+     control = list(adapt_delta = 0.999, max_treedepth = 12))
 
 summary(m_night_05)
 saveRDS(m_night_05, "m_night_05.rds")
@@ -606,16 +879,29 @@ night_total_results <- process_model_group(
   data         = microclimate_shield_total_night,
   label        = "night_total",
   group_name   = "Nighttime Min Temp", 
-  # --- ADD THESE SPEED ARGUMENTS ---
-  cores = 4,
-  iter = 4000 
+  priors = make_monthly_night_priors(shield_sd = 2),
+# --- PASS BACKEND & SPEED ARGUMENTS HERE ---
+  backend = "cmdstanr",
+  cores   = 4,
+  threads = threading(4),
+  iter    = 6000,
+  warmup  = 1500
 )
 
 saveRDS(night_total_results, "night_total_results.rds")
 
 # --------- SECTION 3: DAY DAILY (Interactions) ----------#
 
-m_day_date_95 <- brm(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day, prior = priors_daily, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+m_day_date_95 <- brm(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|probe) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), 
+     data = microclimate_shield_date_day, family = gaussian(),
+     prior = make_daily_day_priors(shield_sd = 2),
+     chains = 4,
+     cores = 4,
+     threads = threading(4),
+     iter = 6000,
+     warmup = 1500,
+     backend = "cmdstanr",
+     control = list(adapt_delta = 0.999, max_treedepth = 15))
 
 summary(m_day_date_95)
 saveRDS(m_day_date_95, "m_day_date_95.rds")
@@ -626,17 +912,29 @@ day_date_results <- process_model_group(
   data         = microclimate_shield_date_day,
   label        = "day_date",
   group_name   = "Daily Day (Interactions)", 
-  # --- ADD THESE SPEED ARGUMENTS ---
-  cores = 4,
-  iter = 4000 
+  priors = make_daily_day_priors(shield_sd = 2),
+# --- PASS BACKEND & SPEED ARGUMENTS HERE ---
+  backend = "cmdstanr",
+  cores   = 4,
+  threads = threading(4),
+  iter    = 6000,
+  warmup  = 1500
 )
-
 
 saveRDS(day_date_results, "day_date_results.rds")
 
 # --------- SECTION 4: NIGHT DAILY ----------#
 
-m_night_date_05 <- brm(min_T2_05 ~ midshield_binomial * wind_scaled + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, prior = priors_daily, cores = 4, chains = 4, iter = 4000, warmup = 1000, control = list(adapt_delta = 0.999))
+m_night_date_05 <- brm(min_T2_05 ~ midshield_binomial * wind_scaled + (1|probe) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, 
+     family = gaussian(),
+     prior = make_daily_night_priors(shield_sd = 2),
+     chains = 4,
+     cores = 4,
+     threads = threading(4),
+     iter = 6000,
+     warmup = 1500,
+     backend = "cmdstanr",
+     control = list(adapt_delta = 0.999, max_treedepth = 15))
 
 summary(m_night_date_05)
 saveRDS(m_night_date_05, "m_night_date_05.rds")
@@ -647,12 +945,17 @@ night_date_results <- process_model_group(
   data         = microclimate_shield_date_night,
   label        = "night_date",
   group_name   = "Daily Night (Interactions)", 
-  # --- ADD THESE SPEED ARGUMENTS ---
-  cores = 4,
-  iter = 4000 
+  priors = make_daily_night_priors(shield_sd = 2),
+# --- PASS BACKEND & SPEED ARGUMENTS HERE ---
+  backend = "cmdstanr",
+  cores   = 4,
+  threads = threading(4),
+  iter    = 6000,
+  warmup  = 1500
 )
 
 saveRDS(night_date_results, "night_date_results.rds")
+
 
 ```
 
@@ -660,62 +963,127 @@ saveRDS(night_date_results, "night_date_results.rds")
 
 ```{r Plots }
 
-# ------- Figure 2:  temp overal violin -------- # 
+# ------- Figure 2 -------- # 
 
-# 1. Update Plot A (Replacing dotplot with jitter)
-Plot_A <- ggplot(microclimate_shield_total_day, 
-                 aes(x = factor(midshield, levels = c('present', 'absent')), 
-                     y = max_T2_95, color = midshield, fill = midshield)) +
-  geom_violin(alpha = 0.2, width = 0.6, color = NA) + 
-  # Using jitter instead of dotplot to avoid the "binned" look
-  geom_jitter(width = 0.15, alpha = 0.3) + 
-  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.2) +
-  labs(x = "Shield Configuration", y = "Max Temp (°C) at 1 cm (11:00 - 17:00)") +
-  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+# --- 1. Posterior Expectations for Day Model ---
+day_pred <- microclimate_shield_total_day %>%
+  distinct(midshield_binomial) %>%
+  add_epred_draws(m_day_95, re_formula = NA) %>%
+  mutate(
+    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
+  )
+
+raw_day <- microclimate_shield_total_day %>%
+  mutate(midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent")))
+
+Plot_A_model <- ggplot(day_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
+  geom_jitter(
+    data = raw_day,
+    aes(x = midshield, y = max_T2_95, color = midshield),
+    width = 0.08, alpha = 0.06, size = 1, inherit.aes = FALSE
+  ) +
+  stat_halfeye(
+    data = filter(day_pred, midshield == "present"),
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "left",
+    scale = 0.6,
+    justification = 1.2
+  ) +
+  stat_halfeye(
+    data = filter(day_pred, midshield == "absent"),
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "right",
+    scale = 0.6,
+    justification = -0.2
+  ) +
+  coord_cartesian(ylim = c(30.5, 37)) +
+  labs(
+    x = "Shield Configuration", 
+    y = "Predicted Max Temp (°C) at 2 cm (11:00 - 17:00)"
+  ) +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent"),
+                    expand = expansion(add = 0.6)) +
   scale_color_manual(values = shield_colors) +
   scale_fill_manual(values = shield_colors) +
   theme_minimal() +
   theme(
-    text = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(margin = margin(r = 10)),
+    text = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
+    axis.title.x = element_text(family = "Arial", size = 20, margin = margin(t = 12)),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
     legend.position = "none",
     panel.grid.major.x = element_blank()
   )
 
-# 2. Update Plot B (Matching Plot A's style)
-Plot_B <- ggplot(microclimate_shield_total_night, 
-                 aes(x = factor(midshield, levels = c('present', 'absent')), 
-                     y = min_T2_05, color = midshield, fill = midshield)) +
-  geom_violin(alpha = 0.2, width = 0.6, color = NA) + 
-  geom_jitter(width = 0.15, alpha = 0.3) +
-  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
-  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.2) +
-  labs(x = "Shield Configuration", y = "Min Temp (°C) at 1 cm (23:00 - 05:00)") +
-  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+# --- 2. Posterior Expectations for Night Model ---
+night_pred <- microclimate_shield_total_night %>%
+  distinct(midshield_binomial) %>%
+  add_epred_draws(m_night_05, re_formula = NA) %>%
+  mutate(
+    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
+  )
+
+raw_night <- microclimate_shield_total_night %>%
+  mutate(midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent")))
+
+Plot_B_model <- ggplot(night_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
+  geom_jitter(
+    data = raw_night,
+    aes(x = midshield, y = min_T2_05, color = midshield),
+    width = 0.08, alpha = 0.06, size = 1, inherit.aes = FALSE
+  ) +
+  stat_halfeye(
+    data = filter(night_pred, midshield == "present"),
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "left",
+    scale = 0.6,
+    justification = 1.2
+  ) +
+  stat_halfeye(
+    data = filter(night_pred, midshield == "absent"),
+    point_interval = median_hdi,
+    .width = c(0.80, 0.95),
+    slab_alpha = 0.4,
+    side = "right",
+    scale = 0.6,
+    justification = -0.2
+  ) +
+  coord_cartesian(ylim = c(12.5, 15.2)) +
+  labs(
+    x = "Shield Configuration", 
+    y = "Predicted Min Temp (°C) at 2 cm (23:00 - 05:00)"
+  ) +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent"),
+                    expand = expansion(add = 0.6)) +
   scale_color_manual(values = shield_colors) +
   scale_fill_manual(values = shield_colors) +
   theme_minimal() +
   theme(
-    text = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(margin = margin(r = 10)),
+    text = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
+    axis.title.x = element_text(family = "Arial", size = 20, margin = margin(t = 12)),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
     legend.position = "none",
     panel.grid.major.x = element_blank()
   )
 
 # ------- Combine and Adjust Layout -------- #
-# Note: Using patchwork (+) to combine
-figure_2 <- (Plot_A + Plot_B) + 
-  plot_annotation(tag_levels = 'A') & # Automatically adds A and B tags
+figure_2 <- (Plot_A_model + Plot_B_model) + 
+  plot_annotation(tag_levels = 'A') & 
   theme(plot.tag = element_text(size = 20, face = "bold", family = "Arial"))
 
 figure_2
 
-# Define your path first
-data_path <- "outputs/figures"
-
 # Save to file
-ggsave(file.path(data_path, "figure_2.jpg"), figure_2, width = 24, height = 12, dpi = 300)
+ggsave(file.path("outputs/figures", "figure_2.jpg"), figure_2, width = 24, height = 12, dpi = 300)
 
 # ------- Figure 3: Daytime temp vs radiation with model -------- # 
 
@@ -763,7 +1131,7 @@ plot_C = microclimate_shield_date_day %>%
   scale_color_manual(values = shield_colors) +
   scale_fill_manual(values = shield_colors) +
   labs(
-    x = expression("Global hourly radiation (J cm"^{-2}*")"),
+    x = expression("Daily sum of global radiation (MJ m"^{-2}*"/day)"),
     y = expression("Predicted Daytime Max Temp (°C)"),
     color = "Midshield",
     fill = "Midshield"
@@ -771,18 +1139,18 @@ plot_C = microclimate_shield_date_day %>%
   theme_classic() +
   theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)), 
+    axis.title.x = element_text(family = "Arial", size = 20),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)), 
     legend.position = "none"
   ) 
 
 
 # ------- Daytime temp vs wind with model -------- #
 
-wind_mean <- mean(microclimate_shield_date_day$max_windspeed)
-wind_sd   <- sd(microclimate_shield_date_day$max_windspeed)
+wind_mean <- mean(microclimate_shield_date_day$mean_windspeed)
+wind_sd   <- sd(microclimate_shield_date_day$mean_windspeed)
 
 plot_D =microclimate_shield_date_day %>%
   data_grid(
@@ -814,7 +1182,7 @@ plot_D =microclimate_shield_date_day %>%
                    labels = c("absent", "present")
                  )
                ),
-             aes(x = max_windspeed,
+             aes(x = mean_windspeed,
                  y = temp_C,
                  color = midshield_binomial),
              alpha = 0.05,
@@ -825,7 +1193,7 @@ plot_D =microclimate_shield_date_day %>%
   scale_color_manual(values = shield_colors) +
   scale_fill_manual(values = shield_colors) +
   labs(
-    x = expression("Max hourly windspeed (m/s)"),
+    x = expression("Mean daily windspeed (m/s)"),
     y = expression("Predicted Daytime Max Temp (°C)"),
     color = "Midshield",
     fill = "Midshield"
@@ -833,12 +1201,12 @@ plot_D =microclimate_shield_date_day %>%
   theme_classic() +
   theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
-    legend.text = element_text(family = "Arial", size = 16),
-    legend.title = element_text(family = "Arial", size = 16)
+    axis.title.x = element_text(family = "Arial", size = 20),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
+    legend.text = element_text(family = "Arial", size = 20),
+    legend.title = element_text(family = "Arial", size = 20)
   ) 
 
 # ------- Combine and Adjust Layout -------- #
@@ -850,12 +1218,12 @@ figure_3 <- (plot_C + plot_D) +
 figure_3
 
 # Save to file
-ggsave(file.path(data_path, "figure_3.jpg"), figure_3, width = 24, height = 12, dpi = 300)
+ggsave(file.path("outputs/figures", "figure_3.jpg"), figure_3, width = 24, height = 12, dpi = 300)
 
 # ------- Figure 4: Nighttime Min Temp vs Wind  -------- #
 
-wind_night_mean <- mean(microclimate_shield_date_night$max_windspeed, na.rm = TRUE)
-wind_night_sd   <- sd(microclimate_shield_date_night$max_windspeed, na.rm = TRUE)
+wind_night_mean <- mean(microclimate_shield_date_night$mean_windspeed, na.rm = TRUE)
+wind_night_sd   <- sd(microclimate_shield_date_night$mean_windspeed, na.rm = TRUE)
 
 figure_4 = microclimate_shield_date_night %>%
   data_grid(
@@ -886,7 +1254,7 @@ figure_4 = microclimate_shield_date_night %>%
                    labels = c("absent", "present")
                  )
                ),
-             aes(x = max_windspeed,
+             aes(x = mean_windspeed,
                  y = temp_C,
                  color = midshield_binomial),
              alpha = 0.05,
@@ -898,7 +1266,7 @@ figure_4 = microclimate_shield_date_night %>%
   scale_fill_manual(values = shield_colors) +
   coord_cartesian(ylim = c(10, 25)) +  # Focuses the y-axis between 10 and 25 degrees
   labs(
-    x = expression("Max hourly windspeed (m/s)"),
+    x = expression("Mean daily windspeed (m/s)"),
     y = expression("Predicted Night-time Min Temp (°C)"),
     color = "Midshield",
     fill = "Midshield"
@@ -906,18 +1274,18 @@ figure_4 = microclimate_shield_date_night %>%
   theme_classic() +
   theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
-    legend.text = element_text(family = "Arial", size = 16),
-    legend.title = element_text(family = "Arial", size = 16)
+    axis.title.x = element_text(family = "Arial", size = 20),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
+    legend.text = element_text(family = "Arial", size = 20),
+    legend.title = element_text(family = "Arial", size = 20)
   ) 
 
 figure_4
 
 # Save to file
-ggsave(file.path(data_path, "figure_4.pdf"), figure_4, width = 12, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path("outputs/figures", "figure_4.jpg"), figure_4, width = 12, height = 12, dpi = 300)
 
 
 # ------- Supplement figure: temp Time Series -------- # 
@@ -930,14 +1298,14 @@ Plot_S1 <- ggplot(microclimate_shield_date_day, aes(x = Date, y = max_T2, color 
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.3) +
   stat_summary(fun = mean, geom = "line", linewidth = 1, alpha = 0.7, aes(group = midshield)) + # Changed size to linewidth
-  labs(y = "Max daily temp (°C) at 1 cm") +
+  labs(y = "Max daily temp (°C) at 2 cm") +
   theme_minimal() +
     theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
+    axis.title.x = element_text(family = "Arial", size = 20),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
     legend.position = "none"
   ) +
   scale_x_date(breaks = scales::date_breaks("3 days"), labels = scales::date_format("%b %d")) +
@@ -949,16 +1317,16 @@ Plot_S2 <- ggplot(microclimate_shield_date_night, aes(x = Date, y = min_T2_05, c
   stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
   stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.3) +
   stat_summary(fun = mean, geom = "line", linewidth = 1, alpha = 0.7, aes(group = midshield)) + # Changed size to linewidth
-  labs(x = "Date", y = "Min daily temp (°C) at 1 cm") +
+  labs(x = "Date", y = "Min daily temp (°C) at 2 cm") +
   theme_minimal() +
     theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
-    legend.text = element_text(family = "Arial", size = 16),
-    legend.title = element_text(family = "Arial", size = 16)
+    axis.title.x = element_text(family = "Arial", size = 20),
+    axis.text.x = element_text(family = "Arial", size = 20),
+    axis.text.y = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(family = "Arial", size = 20, margin = margin(r = 10)),
+    legend.text = element_text(family = "Arial", size = 20),
+    legend.title = element_text(family = "Arial", size = 20)
   ) +
   scale_x_date(breaks = scales::date_breaks("3 days"), labels = scales::date_format("%b %d")) +
   scale_color_manual(values = shield_colors) +
@@ -973,14 +1341,14 @@ supplement_plot1 <- (Plot_S1 + Plot_S2) +
 supplement_plot1
 
 # Save to file
-ggsave(file.path(data_path, "supplement_plot1.pdf"), supplement_plot1, width = 24, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path("outputs/figures", "supplement_plot1.jpg"), supplement_plot1, width = 24, height = 12, dpi = 300)
 
 
 # ------- Supplement figure: Daily wind and radiation -------- # 
 
 
 # Calculate scaling factor
-scale_factor <- max(microclimate_shield_date_day$max_windspeed, na.rm = TRUE) / 
+scale_factor <- max(microclimate_shield_date_day$mean_windspeed, na.rm = TRUE) / 
                 max(microclimate_shield_date_day$radiation, na.rm = TRUE)
 
 # Optional: custom function for mean ± CI (if not already defined)
@@ -995,19 +1363,19 @@ mean_cl_normal <- function(x, conf.int = 0.95) {
 Plot_dual <- ggplot(microclimate_shield_date_day, aes(x = Date)) +
   
   # WIND SPEED (primary axis)
-  stat_summary(aes(y = max_windspeed),
+  stat_summary(aes(y = mean_windspeed),
                fun = mean,
                geom = "line",
                linewidth = 1.2,
                color = "steelblue") +
   
-  stat_summary(aes(y = max_windspeed),
+  stat_summary(aes(y = mean_windspeed),
                fun = mean,
                geom = "point",
                size = 3,
                color = "steelblue") +
   
-  stat_summary(aes(y = max_windspeed),
+  stat_summary(aes(y = mean_windspeed),
                fun.data = mean_cl_normal,
                geom = "errorbar",
                width = 0.2,
@@ -1028,9 +1396,9 @@ Plot_dual <- ggplot(microclimate_shield_date_day, aes(x = Date)) +
   
   # Dual axis
   scale_y_continuous(
-    name = "Max wind speed (m/s)",
+    name = "Mean daily wind speed (m/s)",
     sec.axis = sec_axis(~ . / scale_factor,
-                        name = "Radiation (J/cm2)")
+                        name = "Daily global radiation (MJ/m2)")
   ) +
   
   scale_x_date(
@@ -1041,105 +1409,19 @@ Plot_dual <- ggplot(microclimate_shield_date_day, aes(x = Date)) +
   theme_minimal() +
   theme(
     panel.grid.major.y = element_line(color = "gray90", linewidth = 0.5),
-    axis.title.x = element_text(family = "Arial", size = 16),
+    axis.title.x = element_text(family = "Arial", size = 20),
     axis.text.x = element_text(family = "Arial", size = 14),
     axis.text.y = element_text(size = 14),
-    axis.title.y.left = element_text(color = "steelblue", size = 16, margin = margin(r = 10)),
-    axis.title.y.right = element_text(color = "orange", size = 16, margin = margin(l = 10))
+    axis.title.y.left = element_text(color = "steelblue", size = 20, margin = margin(r = 10)),
+    axis.title.y.right = element_text(color = "orange", size = 20, margin = margin(l = 10))
   )
 
 Plot_dual
 
 # Save to file
-ggsave(file.path(data_path, "supplement_plot2.pdf"), Plot_dual, width = 12, height = 12, dpi = 300, device = cairo_pdf)
+ggsave(file.path("outputs/figures", "supplement_plot2.jpg"), Plot_dual, width = 12, height = 12, dpi = 300)
 
 
-```
-
-```{r Model based plots}
-
-
-# --- 1. Posterior Expectations for Day Model ---
-day_pred <- microclimate_shield_total_day %>%
-  distinct(midshield_binomial) %>%
-  add_epred_draws(m_day_95, re_formula = NA) %>%
-  mutate(
-    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
-  )
-
-Plot_A_model <- ggplot(day_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
-  stat_halfeye(
-    point_interval = median_hdi,
-    .width = c(0.80, 0.95),
-    slab_alpha = 0.4,
-    side = "left",
-    scale = 0.6,
-    justification = 1.15
-  ) +
-  coord_cartesian(ylim = c(30.5, 37)) +
-  labs(
-    x = "Shield Configuration", 
-    y = "Max Temp (°C) at 1 cm (11:00 - 17:00)"
-  ) +
-  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
-  scale_color_manual(values = shield_colors) +
-  scale_fill_manual(values = shield_colors) +
-  theme_minimal() +
-  theme(
-    text = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    legend.position = "none",
-    panel.grid.major.x = element_blank()
-  )
-
-# --- 2. Posterior Expectations for Night Model ---
-night_pred <- microclimate_shield_total_night %>%
-  distinct(midshield_binomial) %>%
-  add_epred_draws(m_night_05, re_formula = NA) %>%
-  mutate(
-    midshield = factor(midshield_binomial, levels = c(1, 0), labels = c("present", "absent"))
-  )
-
-Plot_B_model <- ggplot(night_pred, aes(x = midshield, y = .epred, fill = midshield, color = midshield)) +
-  stat_halfeye(
-    point_interval = median_hdi,
-    .width = c(0.80, 0.95),
-    slab_alpha = 0.4,
-    side = "left",
-    scale = 0.6,
-    justification = 1.15
-  ) +
-  coord_cartesian(ylim = c(12.5, 15.2)) +
-  labs(
-    x = "Shield Configuration", 
-    y = "Min Temp (°C) at 1 cm (23:00 - 05:00)"
-  ) +
-  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
-  scale_color_manual(values = shield_colors) +
-  scale_fill_manual(values = shield_colors) +
-  theme_minimal() +
-  theme(
-    text = element_text(family = "Arial", size = 16),
-    axis.title.y = element_text(family = "Arial", size = 16, margin = margin(r = 10)),
-    axis.title.x = element_text(family = "Arial", size = 16),
-    axis.text.x = element_text(family = "Arial", size = 16),
-    axis.text.y = element_text(family = "Arial", size = 16),
-    legend.position = "none",
-    panel.grid.major.x = element_blank()
-  )
-
-# ------- Combine and Adjust Layout -------- #
-figure_2 <- (Plot_A_model + Plot_B_model) + 
-  plot_annotation(tag_levels = 'A') & 
-  theme(plot.tag = element_text(size = 20, face = "bold", family = "Arial"))
-
-figure_2
-
-# Save to file
-ggsave(file.path("outputs/figures", "figure_2.jpg"), figure_2, width = 24, height = 12, dpi = 300)
 ```
 
 ## Supplementary info
@@ -1343,57 +1625,208 @@ print(doc, target = here("Manuscript", "Full_Automated_Supplement.docx"))
 
 ```{r Frequentist stat check}
 
-# To save time having to run the models, load them directly from here to create plots and tables
-
-#load rds file 
-
-brms_day_95 <- readRDS("m_day_95.rds")
-
-summary(brms_day_95)
-
-brms_night_05 <- readRDS("m_night_05.rds")
-
-summary(brms_night_05)
-
-# Daily resolution
-
-brms_day_date_95 <- readRDS("m_day_date_95.rds")
-
-summary(brms_day_date_95)
-
-brms_night_date_05 <- readRDS("m_night_date_05.rds")
-
-summary(brms_night_date_05)
-
 # Re-run the modfels using lme4
 
 library(lme4)
 
 lmer_day_95 <- lmer(max_T2_95 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
-      data = microclimate_shield_total_day)
+      data = microclimate_shield_total_day, REML = FALSE)
 
 summary(lmer_day_95)
 
+lmer_night_05 <- lmer(min_T2_05 ~ midshield_binomial + (1|div) + (1|treatment) + (1|dist_wall), 
+      data = microclimate_shield_total_night, REML = FALSE)
+
+summary(lmer_night_05)
+
+
 ###################################
 
-lmer_day_date_95 <- lmer(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day)
+lmer_day_date_95 <- lmer(max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled) + (1|probe) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_day, REML = FALSE)
 
 summary(lmer_day_date_95)
 
-install.packages(c("performance", "see", "qqplotr"))
-library(performance)
+lmer_night_date_05 <- lmer(min_T2_05 ~ midshield_binomial * wind_scaled + (1|probe) + (1|div) +  (1|treatment) + (1|dist_wall) + (1|Date), data = microclimate_shield_date_night, REML = FALSE)
 
-plot(lmer_day_date_95)
-qqplot(lmer_day_date_95)
+summary(lmer_night_date_05)
 
-# Generates a 6-panel diagnostic dashboard for lmerMod
-check_model(lmer_day_date_95)
-
-# Store the check plot object
-p_diag <- check_model(lmer_day_date_95)
-
-# Save with expanded dimensions (14 x 16 inches)
-ggsave("lmer_diagnostics.pdf", plot = plot(p_diag), width = 14, height = 16, dpi = 300)
 
 ```
 
+```{r Non linear check for windspeed} 
+
+non_lin_wind_plot = microclimate_shield_date_day %>%
+  ggplot(aes(x = mean_windspeed, y = max_T2_95, 
+             color = factor(midshield),
+             fill = factor(midshield))) +   # add fill for the ribbon too
+  geom_point(alpha = 0.05) +
+  geom_smooth(method = "loess", se = TRUE) +
+  geom_smooth(method = "lm", se = FALSE, linetype = "dashed") +
+  scale_color_manual(values = shield_colors, labels = c("absent", "present")) +
+  scale_fill_manual(values = shield_colors, labels = c("absent", "present"), guide = "none") +  # ribbon fill, no separate legend
+  labs(x = "Wind speed (scaled)", y = "Max T2 (95th pctile)", color = "Midshield") +
+  theme_classic()
+
+non_lin_wind_plot
+
+ggsave(file.path("outputs/figures", "non_lin_wind_plot.jpg"), non_lin_wind_plot, width = 14, height = 12, dpi = 300)
+
+make_daily_day_quad_priors <- function(shield_sd = 2) {
+  
+  c(
+    # Default prior for all population-level coefficients:
+    # radiation, wind, wind^2, and all shield interactions
+    set_prior(
+      "normal(0, 1)",
+      class = "b"
+    ),
+    
+    # Override the general fixed-effect prior for middle shield
+    set_prior(
+      paste0("normal(0, ", shield_sd, ")"),
+      class = "b",
+      coef = "midshield_binomial"
+    ),
+    
+    # Experimental-design grouping terms
+
+    set_prior(
+  "normal(0, 1)",
+  class = "sd",
+  group = "probe"
+),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "div"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "treatment"
+    ),
+    
+    set_prior(
+      "normal(0, 1)",
+      class = "sd",
+      group = "dist_wall"
+    ),
+    
+    # Day-level variation
+    set_prior(
+      "normal(0, 2)",
+      class = "sd",
+      group = "Date"
+    ),
+    
+    # Residual variation
+    set_prior(
+      "normal(0, 2)",
+      class = "sigma"
+    )
+  )
+}
+
+
+m_day_date_95_quad <- brm(
+  max_T2_95 ~ midshield_binomial *
+  (rad_scaled + wind_scaled + I(wind_scaled^2)) +
+  (1 | probe) +
+  (1 | div) +
+  (1 | treatment) +
+  (1 | dist_wall) +
+  (1 | Date)
+  data = microclimate_shield_date_day,
+  family = gaussian(),
+  prior = make_daily_day_quad_priors(shield_sd = 2),
+  
+  cores = 4,
+  chains = 4,
+  threads = threading(4),
+  backend = "cmdstanr",
+  iter = 4000,
+  warmup = 1000,
+  control = list(
+    adapt_delta = 0.999,
+    max_treedepth = 15
+  )
+)
+
+summary(m_day_date_95_quad)
+
+m_day_date_95_quad_priorcheck <- brm(
+  max_T2_95 ~ midshield_binomial * (rad_scaled + wind_scaled + I(wind_scaled^2)) + 
+    (1|div) + (1|treatment) + (1|dist_wall) + (1|Date),
+  data = microclimate_shield_date_day,
+  prior = priors_daily_day_quad,
+  sample_prior = "only",
+  cores = 4, chains = 4, 
+  threads = threading(4),
+  backend = "cmdstanr",
+  iter = 2000, warmup = 1000,
+  control = list(adapt_delta = 0.999, max_treedepth = 15)
+)
+
+
+```
+
+```{r old plots}
+
+# 1. Update Plot A (Replacing dotplot with jitter)
+Plot_A <- ggplot(microclimate_shield_total_day, 
+                 aes(x = factor(midshield, levels = c('present', 'absent')), 
+                     y = max_T2_95, color = midshield, fill = midshield)) +
+  geom_violin(alpha = 0.2, width = 0.6, color = NA) + 
+  # Using jitter instead of dotplot to avoid the "binned" look
+  geom_jitter(width = 0.15, alpha = 0.3) + 
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.2) +
+  labs(x = "Shield Configuration", y = "Max Temp (°C) at 2 cm (11:00 - 17:00)") +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    legend.position = "none",
+    panel.grid.major.x = element_blank()
+  )
+
+# 2. Update Plot B (Matching Plot A's style)
+Plot_B <- ggplot(microclimate_shield_total_night, 
+                 aes(x = factor(midshield, levels = c('present', 'absent')), 
+                     y = min_T2_05, color = midshield, fill = midshield)) +
+  geom_violin(alpha = 0.2, width = 0.6, color = NA) + 
+  geom_jitter(width = 0.15, alpha = 0.3) +
+  stat_summary(fun = mean, geom = "point", size = 4, shape = 16) +
+  stat_summary(fun.data = mean_cl_normal, geom = "errorbar", width = 0.2) +
+  labs(x = "Shield Configuration", y = "Min Temp (°C) at 2 cm (23:00 - 05:00)") +
+  scale_x_discrete(labels = c("present" = "Present", "absent" = "Absent")) +
+  scale_color_manual(values = shield_colors) +
+  scale_fill_manual(values = shield_colors) +
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Arial", size = 20),
+    axis.title.y = element_text(margin = margin(r = 10)),
+    legend.position = "none",
+    panel.grid.major.x = element_blank()
+  )
+
+# ------- Combine and Adjust Layout -------- #
+# Note: Using patchwork (+) to combine
+figure_2 <- (Plot_A + Plot_B) + 
+  plot_annotation(tag_levels = 'A') & # Automatically adds A and B tags
+  theme(plot.tag = element_text(size = 20, face = "bold", family = "Arial"))
+
+figure_2
+
+# Define your path first
+data_path <- "outputs/figures"
+
+# Save to file
+ggsave(file.path(data_path, "figure_2_old.jpg"), figure_2_old, width = 24, height = 12, dpi = 300)
+
+```

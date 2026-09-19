@@ -13,3 +13,15 @@ cmdstan/
 *.png
 /outputs
 Data/Bioclive_microclimate_shield_2024.csv
+# Stan / CmdStan binaries and output files
+*.exe
+*.o
+*.so
+*.dll
+*.rds
+*_cmdstan.csv
+.cmdstanr/
+
+# Temp files created by brms / cmdstanr
+file*.stan
+file*.json
